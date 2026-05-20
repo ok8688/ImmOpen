@@ -76,13 +76,13 @@ dl/
 build_dir/
 staging_dir/
 tmp/
-ccache/
+.cache/openwrt/
 logs/
 
 # firmware outputs
 *.bin
 *.img.gz
-*.img.gz.*
+*.img.gz
 *.ipk
 *.apk
 
