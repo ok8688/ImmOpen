@@ -1,1 +1,5 @@
-# openimm
+- ImmortalWrt LTS CI
+- self-hosted runner (optional)
+- schedule: 22:26 HKT
+- target: x86_64
+- passwall included
