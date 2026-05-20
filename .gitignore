@@ -84,6 +84,7 @@ logs/
 *.img.gz
 *.bin
 *.ipk
+*.apk
 
 # OpenWrt artifacts
 *.buildinfo
