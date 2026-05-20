@@ -80,13 +80,13 @@ ccache/
 logs/
 
 # firmware outputs
-*.img
-*.img.gz
 *.bin
+*.img.gz
+*.img.gz.*
 *.ipk
 *.apk
 
 # OpenWrt artifacts
 *.buildinfo
 *.manifest
-sha256sums
+**/sha256sums
