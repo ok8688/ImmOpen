@@ -23,7 +23,6 @@
 *.dll
 *.so.*
 
-
 # Fortran module files
 *.mod
 *.smod
@@ -61,9 +60,6 @@ compile_commands.json
 # vcpkg
 vcpkg_installed/
 
-# debug information files
-*.dwo
-
 # test output & cache
 Testing/
 
@@ -71,20 +67,22 @@ Testing/
 # OpenWrt CI extra ignore
 # =========================
 
+# OpenWrt core build dirs
 dl/
 build_dir/
 staging_dir/
 tmp/
-.cache/openwrt/
+cache/
 logs/
 
 # firmware outputs
 *.bin
+*.img
 *.img.gz
 *.ipk
 *.apk
 
-# OpenWrt artifacts
+# OpenWrt build artifacts
 *.buildinfo
 *.manifest
 **/sha256sums
