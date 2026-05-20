@@ -1,4 +1,6 @@
-# Prerequisites
+# =========================
+# Prerequisites (C/C++)
+# =========================
 *.d
 
 # Compiled Object files
@@ -38,12 +40,12 @@
 *.out
 *.app
 
-# Build directories
+# =========================
+# Build directories (CMake / general)
+# =========================
 build/
 Build/
 build-*/
-
-# CMake generated files
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -51,7 +53,9 @@ Makefile
 install_manifest.txt
 compile_commands.json
 
+# =========================
 # Temporary files
+# =========================
 *.tmp
 *.log
 *.bak
@@ -72,17 +76,22 @@ dl/
 build_dir/
 staging_dir/
 tmp/
-cache/
+.cache/
 logs/
 
+# =========================
 # firmware outputs
+# =========================
 *.bin
 *.img
+*.img.*
 *.img.gz
 *.ipk
 *.apk
 
+# =========================
 # OpenWrt build artifacts
+# =========================
 *.buildinfo
 *.manifest
 **/sha256sums
