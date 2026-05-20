@@ -67,3 +67,25 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# =========================
+# OpenWrt CI extra ignore
+# =========================
+
+dl/
+build_dir/
+staging_dir/
+tmp/
+ccache/
+logs/
+
+# firmware outputs
+*.img
+*.img.gz
+*.bin
+*.ipk
+
+# OpenWrt artifacts
+*.buildinfo
+*.manifest
+sha256sums
