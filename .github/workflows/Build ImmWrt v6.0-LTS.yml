@@ -157,34 +157,6 @@ jobs:
 
           retry ./scripts/feeds install -a -f
 
-          # ==========================================
-          # 🟢 [UI 視覺修復] Chrome 148+ Argon 表格橫線修復
-          # ==========================================
-
-          ARGON_CSS=$(find feeds package -type f \
-            -name "cascade.css" \
-            -path "*luci-theme-argon*" 2>/dev/null || true)
-
-          if [ -n "$ARGON_CSS" ]; then
-            for f in $ARGON_CSS; do
-
-              grep -q "Chrome 148+ Argon Table Fix" "$f" || cat << 'EOF' >> "$f"
-
-          /* Chrome 148+ Argon Table Fix */
-          .cbi-section-table tr,
-          .cbi-section-table-row,
-          table tr {
-            border-bottom: 0 !important;
-            box-shadow: none !important;
-          }
-
-          EOF
-
-            done
-          fi
-
-          # ==========================================
-
           # 🚀 v3.38f 黃金定點抹除法 (掛載點)
           ./scripts/feeds uninstall luci-app-fstab || true
 
@@ -312,6 +284,10 @@ jobs:
 
           export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct || date +%s)
 
+          # ==========================================
+          # 📡 啟動 SRE 駕駛艙雷達
+          # ==========================================
+
           MONITOR_PID=""
 
           cleanup_monitor() {
@@ -331,6 +307,8 @@ jobs:
           ) &
 
           MONITOR_PID=$!
+
+          # ==========================================
 
           for i in 1 2 3; do
             make download -j$(nproc) && break || {
