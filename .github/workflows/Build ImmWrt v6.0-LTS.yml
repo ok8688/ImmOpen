@@ -3,6 +3,7 @@
 # =====================================================================
 # 狀態：ABSOLUTE SEALED (絕對封存)。
 # 審核：母版邏輯全量遷移，緩存閉環，雷達裝載。
+# 修正：Argon 主題 Chrome 148+ 橫線渲染 Bug 已從源碼層面抹除。
 # =====================================================================
 
 name: Build ImmWrt v6.0-LTS
@@ -156,6 +157,17 @@ jobs:
             package/openwrt-passwall
 
           retry ./scripts/feeds install -a -f
+
+          # ==========================================
+          # 🟢 [UI 視覺修復] 抹除 Argon 主題在 Chrome 148+ 下的表格橫線
+          # ==========================================
+          ARGON_CSS=$(find feeds package -type f -name "cascade.css" -path "*luci-theme-argon*" 2>/dev/null || true)
+          if [ -n "$ARGON_CSS" ]; then
+            for f in $ARGON_CSS; do
+              echo -e "\n/* Absolute Fix for Chrome 148+ Table Borders */\ntr td, .cbi-section-table-row td, .cbi-value-field { border-bottom: none !important; }" >> "$f"
+            done
+          fi
+          # ==========================================
 
           # 🚀 v3.38f 黃金定點抹除法 (掛載點)
           ./scripts/feeds uninstall luci-app-fstab || true
