@@ -1,11 +1,11 @@
 # =====================================================================
-# 🔒 [LTS FINAL SEALED] - THE ABSOLUTE FINALITY v6.0.3 (25.12.0 ADAPTIVE)
+# 🔒 [LTS FINAL SEALED] - THE ABSOLUTE FINALITY v6.0.4 (25.12.0 TSAR BOMBA)
 # =====================================================================
-# 狀態：ADAPTIVE SEALED (適應性自癒封存)。
-# 審核：確立自癒架構，修復進程屠宰邏輯，恢復 Snapshot 快取追溯錨點。
+# 狀態：TSAR BOMBA SEALED (沙皇級物理空間強化封存)。
+# 審核：確立自癒架構，修復進程屠宰邏輯，解鎖極限空間清理協議。
 # =====================================================================
 
-name: Build ImmWrt v6.0.3-LTS
+name: Build ImmWrt v6.0.4-LTS
 
 on:
   workflow_dispatch:
@@ -58,19 +58,26 @@ jobs:
       - name: Init SRE Environment & Space Cleanup
         run: |
           set -euo pipefail
-          echo "=== 💥 啟動究極核爆清理 (釋放極限空間) ==="
+          echo "=== 💥 啟動沙皇級核爆清理 (釋放終極極限空間) ==="
+          # ☢️ 追加清理 hostedtoolcache (GitHub 預裝工具包)、rust、powershell 等巨獸
           sudo rm -rf \
             /usr/share/dotnet \
             /usr/local/lib/android \
             /opt/ghc \
             /usr/share/swift \
             /usr/local/lib/node_modules \
-            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache \
+            /usr/local/share/powershell \
+            /usr/share/rust \
             /opt/microsoft \
             /usr/local/share/edge_driver \
             /usr/local/.ghcup \
             /usr/share/miniconda \
-            /opt/az
+            /opt/az \
+            /usr/local/share/boost \
+            /usr/local/share/chromium \
+            /usr/local/lib/heroku
+            
           sudo docker system prune -af || true
           sudo apt-get clean
           
@@ -261,7 +268,7 @@ jobs:
         run: |
           echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
           # 🛡️ 恢復快照綁定：確保編譯指紋的精確性，利用 restore-keys 兜底命中
-          echo "dl_key=dl-v6.0.3-${{ hashFiles('openwrt/feeds.conf.default', 'openwrt/feeds.snapshot.txt') }}" >> $GITHUB_OUTPUT
+          echo "dl_key=dl-v6.0.4-${{ hashFiles('openwrt/feeds.conf.default', 'openwrt/feeds.snapshot.txt') }}" >> $GITHUB_OUTPUT
           
       - name: Restore Cache
         id: cache_restore
@@ -271,7 +278,7 @@ jobs:
             openwrt/dl
           key: ${{ steps.var.outputs.dl_key }}
           restore-keys: |
-            dl-v6.0.3-
+            dl-v6.0.4-
             
       - name: Build Firmware
         run: |
@@ -336,16 +343,16 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v6.0.3-LTS-b${{ github.run_number }}-${{ steps.var.outputs.date }}
-          name: ImmWrt v6.0.3-LTS (ADAPTIVE SEALED)
+          tag_name: v6.0.4-LTS-b${{ github.run_number }}-${{ steps.var.outputs.date }}
+          name: ImmWrt v6.0.4-LTS (TSAR BOMBA SEALED)
           body: |
-            ### 🔒 v6.0.3-LTS ADAPTIVE SEALED
+            ### 🔒 v6.0.4-LTS TSAR BOMBA SEALED
+            - **沙皇級空間釋放**：掛載終極核爆清理協議，抹除 GitHub runner 深層工具包 (hostedtoolcache, rust 等)，為韌體封裝騰出極限實體空間。
             - **自癒架構 (Adaptive LTS)**：確信「永遠編譯最新版」的戰略，容忍上游漂移，實現 Hash 動態修復。
             - **進程安全**：引入 `xargs -r kill -9` 確保 CI 環境絕對無殭屍進程殘留。
             - **指紋溯源**：Cache Key 恢復 snapshot 綁定，兼顧嚴謹的可重現建構與緩存效率。
             - **25.12.0 正式版對齊**：全面切換至 ImmortalWrt 25.12.0 正式版母體。
             - **SRE 雷達監控**：背景心跳 + RAM/DISK 探針，防禦 GitHub 靜默超時。
-            - **官方 PassWall 直連**：物理抹除 feeds 舊版源碼，確保官方最新源。
           files: |
             openwrt/bin/targets/x86/64/*combined*.img.gz
             openwrt/bin/targets/x86/64/sha256sums
