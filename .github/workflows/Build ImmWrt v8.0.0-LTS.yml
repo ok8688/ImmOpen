@@ -1,13 +1,15 @@
 # =====================================================================
-# 🔒 [LTS FINAL SEALED] - THE ABSOLUTE FINALITY v8.01 (25.12.1 TSAR BOMBA)
+# 🔒 [LTS FINAL SEALED] - THE ABSOLUTE FINALITY v8.0.0 (25.12.1 TSAR BOMBA)
 # =====================================================================
 # 狀態：TSAR BOMBA SEALED (沙皇級物理空間強化封存)。
 # 哲學：鎖定正式版發行分支，透過 Adaptive Drift 容忍上游漂移。
-# 終極擴充：
-# 1. 於 Core Config 階段後精準注入 16 文件白名單精確備份規格。
+# 終極融合：
+# 1. 繼承 Snapshot 的企業級 retry 除錯、串流日誌與全套考古 Artifacts。
+# 2. 升級 SOURCE_DATE_EPOCH 溯源與 find 精準提取 openwrt_release。
+# 3. 保留 LTS 專屬的沙皇空間清理、4G Swap 與自癒 Hash 架構。
 # =====================================================================
 
-name: Build ImmWrt v8.01-LTS
+name: Build ImmWrt v8.0.0-LTS
 
 on:
   workflow_dispatch:
@@ -138,7 +140,6 @@ jobs:
             
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
-
           # =====================================================
           # 🔒 Stable Drift Control v1.1 (ADAPTIVE REVISION)
           # Goal: latest upstream + CI self-healing stability
@@ -169,14 +170,12 @@ jobs:
               echo "⚠️ $name: Artifact missing, keeping 'skip' to force build"
             fi
           }
-
           sync_hash "sing-box" "package/openwrt-passwall-packages/sing-box/Makefile" "sing-box-"
           sync_hash "xray-core" "package/openwrt-passwall-packages/xray-core/Makefile" "Xray-core-"
           
           set -e
           echo "🔒 [SDC v1.1] Adaptive mode completed"
           # =====================================================
-
           # 全域精準破壞前端選單殘留節點 (掛載點與插件)
           find feeds package -path "*/usr/share/luci/menu.d/*.json" -type f | while read -r f; do
             jq 'del(."admin/system/mounts", ."admin/services/mounts", ."admin/system/plugins")' "$f" > "$f.tmp" && mv "$f.tmp" "$f" || true
@@ -199,7 +198,7 @@ jobs:
           
       - name: Generate Cache Variables
         id: var
-        run: echo "dl_key=dl-v8.01-${{ hashFiles('feeds.snapshot.txt') }}-$(sha256sum toolchain.info | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+        run: echo "dl_key=dl-v8.0.0-${{ hashFiles('feeds.snapshot.txt') }}-$(sha256sum toolchain.info | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Restore Cache
         uses: actions/cache/restore@v4
@@ -207,9 +206,7 @@ jobs:
           path: |
             openwrt/dl
           key: ${{ steps.var.outputs.dl_key }}
-          # 🚀 三級快取降級防線：當 v8.01 快取尚未生成時，無縫下探抓取歷史上累積的 v8.0.0 快取包，極速冷啟動
           restore-keys: |
-            dl-v8.01-
             dl-v8.0.0-
             dl-
             
@@ -266,115 +263,6 @@ jobs:
           } > .config
           make defconfig && ./scripts/diffconfig.sh > ../logs_diffconfig.txt
           gzip -9f -c .config > ../logs_full.config.gz
-
-      - name: Install ImmWrt Backup Specification v8.01 (LTS Track)
-        run: |
-          set -euo pipefail
-
-          # 🛡️ [LTS 注釋]：創建預編譯注入目錄，將 16 文件精確白名單備份工具固化於 ROM 中
-          mkdir -p openwrt/files/usr/bin
-
-          cat > openwrt/files/usr/bin/immwrt-backup << 'EOF'
-          #!/bin/sh
-
-          BACKUP=/root/immwrt-backup
-          TAR=/root/immwrt-backup.tar.gz
-
-          backup() {
-
-              rm -rf "$BACKUP"
-              mkdir -p "$BACKUP"
-
-              mkdir -p "$BACKUP/etc/config"
-
-              cp -af /etc/config/argon            "$BACKUP/etc/config/"
-              cp -af /etc/config/ddns             "$BACKUP/etc/config/"
-              cp -af /etc/config/dhcp             "$BACKUP/etc/config/"
-              cp -af /etc/config/firewall         "$BACKUP/etc/config/"
-              cp -af /etc/config/luci             "$BACKUP/etc/config/"
-              cp -af /etc/config/network          "$BACKUP/etc/config/"
-              cp -af /etc/config/passwall         "$BACKUP/etc/config/"
-              cp -af /etc/config/passwall_server  "$BACKUP/etc/config/"
-              cp -af /etc/config/smartdns         "$BACKUP/etc/config/"
-              cp -af /etc/config/system           "$BACKUP/etc/config/"
-              cp -af /etc/config/upnpd            "$BACKUP/etc/config/"
-
-              mkdir -p "$BACKUP/usr/share/passwall/rules"
-
-              cp -af /usr/share/passwall/rules/direct_host "$BACKUP/usr/share/passwall/rules/"
-              cp -af /usr/share/passwall/rules/direct_ip   "$BACKUP/usr/share/passwall/rules/"
-              cp -af /usr/share/passwall/rules/proxy_host  "$BACKUP/usr/share/passwall/rules/"
-              cp -af /usr/share/passwall/rules/proxy_ip    "$BACKUP/usr/share/passwall/rules/"
-
-              mkdir -p "$BACKUP/etc/crontabs"
-
-              cp -af /etc/crontabs/root "$BACKUP/etc/crontabs/"
-
-              rm -f "$TAR"
-
-              tar -czf "$TAR" -C /root immwrt-backup
-
-              rm -rf "$BACKUP"
-
-              echo
-              echo "Backup finished."
-              echo "$TAR"
-          }
-
-          restore() {
-
-              if [ ! -f "$TAR" ]; then
-                  echo
-                  echo "Backup not found."
-                  exit 1
-              fi
-
-              rm -rf "$BACKUP"
-
-              tar -xzf "$TAR" -C /root
-
-              cp -af "$BACKUP/etc/config/"* /etc/config/
-
-              cp -af "$BACKUP/usr/share/passwall/rules/"* /usr/share/passwall/rules/
-
-              cp -af "$BACKUP/etc/crontabs/root" /etc/crontabs/
-
-              sync
-
-              rm -rf "$BACKUP"
-
-              echo
-              echo "Restore finished."
-              echo "Please reboot."
-          }
-
-          case "$1" in
-
-              backup|b)
-                  backup
-                  ;;
-
-              restore|r)
-                  restore
-                  ;;
-
-              *)
-                  echo
-                  echo "Usage:"
-                  echo
-                  echo "immwrt-backup backup"
-                  echo "immwrt-backup restore"
-                  echo
-                  echo "Shortcut:"
-                  echo
-                  echo "immwrt-backup b"
-                  echo "immwrt-backup r"
-                  ;;
-          esac
-
-          EOF
-
-          chmod +x openwrt/files/usr/bin/immwrt-backup
           
       - name: Build Firmware
         run: |
@@ -499,11 +387,10 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v8.01-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
-          name: ImmWrt v8.01-LTS (TSAR BOMBA SEALED)
+          tag_name: v8.0.0-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
+          name: ImmWrt v8.0.0-LTS (TSAR BOMBA SEALED)
           body: |
-            ### 🔒 v8.01-LTS TSAR BOMBA SEALED
-            - **備份腳本深度掛載**：於編譯期直接將 `immwrt-backup` 燒錄至 `/usr/bin/` 韌體層，免疫所有原廠重置，提供災難復原護城河。
+            ### 🔒 v8.0.0-LTS TSAR BOMBA SEALED
             - **沙皇級空間釋放**：掛載終極核爆清理協議，抹除 GitHub runner 深層工具包 (hostedtoolcache, rust 等)，為韌體封裝騰出極限實體空間。
             - **自癒架構 (Adaptive LTS)**：確信「永遠編譯最新版」的戰略，容忍上游漂移，實現 Hash 動態修復。
             - **進程安全**：引入 `xargs -r kill -9` 確保 CI 環境絕對無殭屍進程殘留。
