@@ -4,7 +4,7 @@
 # 狀態：TSAR BOMBA SEALED (沙皇級物理空間強化封存)。
 # 哲學：鎖定正式版發行分支，透過 Adaptive Drift 容忍上游漂移。
 # 終極擴充：
-# 1. 於 Core Config 階段後精準注入 ImmWrt Backup Specification v8.01 (files 機制)。
+# 1. 於 Core Config 階段後精準注入 16 文件白名單精確備份規格。
 # =====================================================================
 
 name: Build ImmWrt v8.01-LTS
@@ -73,6 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== 💥 啟動沙皇級核爆清理 (釋放終極極限空間) ==="
+          # ☢️ 追加防呆安全網 || true，免疫 GitHub Runner 未來映像檔的目錄變更
           sudo rm -rf \
             /usr/share/dotnet \
             /usr/local/lib/android \
@@ -126,6 +127,7 @@ jobs:
           echo "▶️ [Step] Updating base feeds..."
           retry timeout 35m ./scripts/feeds update -a
           
+          # ✅ 終極物理防護 - 徹底切斷舊版供應鏈
           ./scripts/feeds uninstall luci-app-passwall xray-core sing-box luci-app-upnp luci-app-advanced-reboot luci-app-fstab luci-app-plugins || true
           rm -rf feeds/luci/applications/luci-app-passwall feeds/packages/net/xray-core feeds/packages/net/sing-box feeds/luci/applications/luci-app-fstab feeds/luci/applications/luci-app-plugins
           rm -rf package/feeds/luci/luci-app-passwall package/feeds/packages/xray-core package/feeds/packages/sing-box package/feeds/luci/luci-app-fstab package/feeds/luci/luci-app-plugins
@@ -137,6 +139,10 @@ jobs:
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
 
+          # =====================================================
+          # 🔒 Stable Drift Control v1.1 (ADAPTIVE REVISION)
+          # Goal: latest upstream + CI self-healing stability
+          # =====================================================
           set +e
           echo "🔒 [SDC v1.1] Adaptive drift mode active..."
           
@@ -169,11 +175,14 @@ jobs:
           
           set -e
           echo "🔒 [SDC v1.1] Adaptive mode completed"
+          # =====================================================
 
+          # 全域精準破壞前端選單殘留節點 (掛載點與插件)
           find feeds package -path "*/usr/share/luci/menu.d/*.json" -type f | while read -r f; do
             jq 'del(."admin/system/mounts", ."admin/services/mounts", ."admin/system/plugins")' "$f" > "$f.tmp" && mv "$f.tmp" "$f" || true
           done
           
+          # 結構化 SBOM 生成
           {
             echo "=== 🧬 COMPONENT COMMIT ==="
             echo "ImmortalWrt Commit: $(git rev-parse HEAD)"
@@ -198,6 +207,7 @@ jobs:
           path: |
             openwrt/dl
           key: ${{ steps.var.outputs.dl_key }}
+          # 🚀 三級快取降級防線：當 v8.01 快取尚未生成時，無縫下探抓取歷史上累積的 v8.0.0 快取包，極速冷啟動
           restore-keys: |
             dl-v8.01-
             dl-v8.0.0-
@@ -260,85 +270,110 @@ jobs:
       - name: Install ImmWrt Backup Specification v8.01 (LTS Track)
         run: |
           set -euo pipefail
-          
-          # 🛡️ [LTS 鐵律注釋]：創建預編譯注入目錄，確保 Factory Reset 後指令依然固化於 ROM 中
+
+          # 🛡️ [LTS 注釋]：創建預編譯注入目錄，將 16 文件精確白名單備份工具固化於 ROM 中
           mkdir -p openwrt/files/usr/bin
 
           cat > openwrt/files/usr/bin/immwrt-backup << 'EOF'
           #!/bin/sh
 
           BACKUP=/root/immwrt-backup
+          TAR=/root/immwrt-backup.tar.gz
 
-          # 💾 核心備份邏輯 - 唯讀封存，絕不動用原程式碼之任何邏輯與字元
           backup() {
 
               rm -rf "$BACKUP"
               mkdir -p "$BACKUP"
 
-              mkdir -p "$BACKUP/etc"
-              cp -a /etc/config "$BACKUP/etc/"
+              mkdir -p "$BACKUP/etc/config"
+
+              cp -af /etc/config/argon            "$BACKUP/etc/config/"
+              cp -af /etc/config/ddns             "$BACKUP/etc/config/"
+              cp -af /etc/config/dhcp             "$BACKUP/etc/config/"
+              cp -af /etc/config/firewall         "$BACKUP/etc/config/"
+              cp -af /etc/config/luci             "$BACKUP/etc/config/"
+              cp -af /etc/config/network          "$BACKUP/etc/config/"
+              cp -af /etc/config/passwall         "$BACKUP/etc/config/"
+              cp -af /etc/config/passwall_server  "$BACKUP/etc/config/"
+              cp -af /etc/config/smartdns         "$BACKUP/etc/config/"
+              cp -af /etc/config/system           "$BACKUP/etc/config/"
+              cp -af /etc/config/upnpd            "$BACKUP/etc/config/"
+
+              mkdir -p "$BACKUP/usr/share/passwall/rules"
+
+              cp -af /usr/share/passwall/rules/direct_host "$BACKUP/usr/share/passwall/rules/"
+              cp -af /usr/share/passwall/rules/direct_ip   "$BACKUP/usr/share/passwall/rules/"
+              cp -af /usr/share/passwall/rules/proxy_host  "$BACKUP/usr/share/passwall/rules/"
+              cp -af /usr/share/passwall/rules/proxy_ip    "$BACKUP/usr/share/passwall/rules/"
 
               mkdir -p "$BACKUP/etc/crontabs"
-              cp -a /etc/crontabs/root "$BACKUP/etc/crontabs/" 2>/dev/null
 
-              mkdir -p "$BACKUP/usr/share/passwall"
-              cp -a /usr/share/passwall/rules "$BACKUP/usr/share/passwall/" 2>/dev/null
+              cp -af /etc/crontabs/root "$BACKUP/etc/crontabs/"
 
-              tar -czf /root/immwrt-backup.tar.gz -C /root immwrt-backup
+              rm -f "$TAR"
+
+              tar -czf "$TAR" -C /root immwrt-backup
+
+              rm -rf "$BACKUP"
 
               echo
               echo "Backup finished."
-              echo
-              echo "/root/immwrt-backup.tar.gz"
+              echo "$TAR"
           }
 
-          # 🔄 核心還原邏輯 - 唯讀封存，絕不動用原程式碼之任何邏輯與字元
           restore() {
 
-              if [ ! -f /root/immwrt-backup.tar.gz ]; then
+              if [ ! -f "$TAR" ]; then
                   echo
                   echo "Backup not found."
                   exit 1
               fi
 
-              rm -rf /root/immwrt-backup
+              rm -rf "$BACKUP"
 
-              tar -xzf /root/immwrt-backup.tar.gz -C /root
+              tar -xzf "$TAR" -C /root
 
-              cp -af /root/immwrt-backup/etc/config/* /etc/config/
+              cp -af "$BACKUP/etc/config/"* /etc/config/
 
-              cp -af /root/immwrt-backup/etc/crontabs/root /etc/crontabs/ 2>/dev/null
+              cp -af "$BACKUP/usr/share/passwall/rules/"* /usr/share/passwall/rules/
 
-              mkdir -p /usr/share/passwall
-
-              cp -af /root/immwrt-backup/usr/share/passwall/rules /usr/share/passwall/ 2>/dev/null
+              cp -af "$BACKUP/etc/crontabs/root" /etc/crontabs/
 
               sync
+
+              rm -rf "$BACKUP"
 
               echo
               echo "Restore finished."
               echo "Please reboot."
           }
 
-          # 📟 路由控制閘門 - 唯讀封存，絕不動用原程式碼之任何邏輯與字元
           case "$1" in
-              backup)
+
+              backup|b)
                   backup
                   ;;
-              restore)
+
+              restore|r)
                   restore
                   ;;
+
               *)
                   echo
                   echo "Usage:"
                   echo
                   echo "immwrt-backup backup"
                   echo "immwrt-backup restore"
+                  echo
+                  echo "Shortcut:"
+                  echo
+                  echo "immwrt-backup b"
+                  echo "immwrt-backup r"
                   ;;
           esac
+
           EOF
 
-          # 🛡️ 賦予高規格執行權限，列入韌體核心工具鏈
           chmod +x openwrt/files/usr/bin/immwrt-backup
           
       - name: Build Firmware
@@ -347,12 +382,16 @@ jobs:
           source /tmp/sre_utils.sh
           cd openwrt
           
+          # 提取最新 component commit timestamp 作為基準 (與 Snapshot 統一，最高精度)
           IMM_DATE=$(git log -1 --format=%ct)
           PW_DATE=$(git -C package/openwrt-passwall log -1 --format=%ct 2>/dev/null || echo "$IMM_DATE")
           PWP_DATE=$(git -C package/openwrt-passwall-packages log -1 --format=%ct 2>/dev/null || echo "$IMM_DATE")
           export SOURCE_DATE_EPOCH=$(printf "%s\n%s\n%s" "$IMM_DATE" "$PW_DATE" "$PWP_DATE" | sort -n | tail -1)
           echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> ../toolchain.info
           
+          # ==========================================
+          # 📡 啟動 SRE 駕駛艙雷達
+          # ==========================================
           MONITOR_PID=""
           cleanup_monitor() {
             echo "🧹 關閉駕駛艙雷達..."
@@ -372,6 +411,7 @@ jobs:
             done
           ) &
           MONITOR_PID=$!
+          # ==========================================
           
           echo "▶️ [Step] Downloading package dependencies (this may take a while)..."
           retry bash -c 'timeout 30m make download -j$(nproc) V=s'
@@ -416,6 +456,7 @@ jobs:
           find openwrt/bin/packages -name "*.apk" | sort > release_assets/apk-list.txt
           [ -s release_assets/apk-list.txt ] || rm -f release_assets/apk-list.txt
           
+          # 🚀 防禦性 find：免疫目錄結構變更，提取最終產物之真實指紋
           OW_RELEASE=$(find openwrt/build_dir -name openwrt_release -path "*/etc/openwrt_release" -print -quit 2>/dev/null || true)
           if [ -n "$OW_RELEASE" ] && [ -f "$OW_RELEASE" ]; then
             OW_REV=$(grep DISTRIB_REVISION "$OW_RELEASE" | head -n 1 | cut -d= -f2 | tr -d "'" || echo "unknown")
