@@ -1,5 +1,5 @@
 # =====================================================================
-# 🔒 [LTS FINAL SEALED] - THE ABSOLUTE FINALITY v8.0.1 (25.12.1 TSAR BOMBA)
+# 🔒 [LTS FINAL SEALED] - THE ABSOLUTE FINALITY v8.0.2 (25.12.1 TSAR BOMBA)
 # =====================================================================
 # 狀態：TSAR BOMBA SEALED (沙皇級物理空間強化封存)。
 # 哲學：鎖定正式版發行分支，透過 Adaptive Drift 容忍上游漂移。
@@ -7,10 +7,10 @@
 # 1. 繼承 Snapshot 的企業級 retry 除錯、串流日誌與全套考古 Artifacts。
 # 2. 升級 SOURCE_DATE_EPOCH 溯源與 find 精準提取 openwrt_release。
 # 3. 保留 LTS 專屬的沙皇空間清理、4G Swap 與自癒 Hash 架構。
-# 4. [v8.0.1] 注入 ib v1.6-LTS 備份工具，修正 UPnP/JSON 編譯衝突。
+# 4. [v8.0.2] 升級 ib v1.7 原生備份工具，加入 Argon dark.css 無損保留。
 # =====================================================================
 
-name: Build ImmWrt v8.0.1-LTS
+name: Build ImmWrt v8.0.2-LTS
 
 on:
   workflow_dispatch:
@@ -198,13 +198,13 @@ jobs:
             done | sort
           } > ../feeds.snapshot.txt
 
-      - name: Inject ImmWrt Backup Tool (ib v1.6-LTS)
+      - name: Inject ImmWrt Backup Tool (ib v1.7)
         run: |
           set -e
           mkdir -p openwrt/package/base-files/files/usr/bin
           cat << 'EOF' > openwrt/package/base-files/files/usr/bin/ib
           #!/bin/sh
-          VERSION="1.6-LTS"; readonly VERSION
+          VERSION="1.7"; readonly VERSION
           BACKUP_DIR="/root"; readonly BACKUP_DIR
           BACKUP="$BACKUP_DIR/immwrt-backup-latest.tar.gz"; readonly BACKUP
           WORK="/tmp/ib-work"; readonly WORK
@@ -212,7 +212,7 @@ jobs:
 
           REQUIRED_FILES="/etc/config/ddns /etc/config/dhcp /etc/config/firewall /etc/config/luci /etc/config/network /etc/config/passwall /etc/config/passwall_server /etc/config/smartdns /etc/config/system /etc/config/upnpd /etc/crontabs/root"
           readonly REQUIRED_FILES
-          OPTIONAL_FILES="/etc/config/argon /usr/share/passwall/rules/direct_host /usr/share/passwall/rules/direct_ip /usr/share/passwall/rules/proxy_host /usr/share/passwall/rules/proxy_ip"
+          OPTIONAL_FILES="/etc/config/argon /usr/share/passwall/rules/direct_host /usr/share/passwall/rules/direct_ip /usr/share/passwall/rules/proxy_host /usr/share/passwall/rules/proxy_ip /www/luci-static/argon/css/dark.css"
           readonly OPTIONAL_FILES
 
           fail(){ echo "FAILED: $1"; exit "$2"; }
@@ -424,7 +424,7 @@ jobs:
           
       - name: Generate Cache Variables
         id: var
-        run: echo "dl_key=dl-v8.0.1-${{ hashFiles('feeds.snapshot.txt') }}-$(sha256sum toolchain.info | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+        run: echo "dl_key=dl-v8.0.2-${{ hashFiles('feeds.snapshot.txt') }}-$(sha256sum toolchain.info | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Restore Cache
         uses: actions/cache/restore@v4
@@ -433,6 +433,7 @@ jobs:
             openwrt/dl
           key: ${{ steps.var.outputs.dl_key }}
           restore-keys: |
+            dl-v8.0.2-
             dl-v8.0.1-
             dl-
             
@@ -613,13 +614,13 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v8.0.1-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
-          name: ImmWrt v8.0.1-LTS (TSAR BOMBA SEALED)
+          tag_name: v8.0.2-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
+          name: ImmWrt v8.0.2-LTS (TSAR BOMBA SEALED)
           body: |
-            ### 🔒 v8.0.1-LTS TSAR BOMBA SEALED
-            - **原生備份引擎**：[v8.0.1] 注入 `ib v1.6-LTS` 原生備份工具，提供 100% POSIX 相容之原子回滾防護，完美適配 OpenWrt 部署環境。
-            - **套件依賴修正**：[v8.0.1] 確保 `luci-app-upnp` 與 `luci-app-advanced-reboot` 正常編譯並寫入依賴清單。
-            - **JSON 韌性升級**：[v8.0.1] 增強 `jq` 解析，遇到殘缺前端選單檔案優雅跳過，防止 Pipeline 假性中斷。
+            ### 🔒 v8.0.2-LTS TSAR BOMBA SEALED
+            - **備份引擎升級**：[v8.0.2] 原生備份工具 `ib` 推進至 `v1.7`，將 Argon 主題的自定義 CSS (`dark.css`) 納入備份清單，實現 UI 修正無損保留。
+            - **套件依賴修正**：確保 `luci-app-upnp` 與 `luci-app-advanced-reboot` 正常編譯並寫入依賴清單。
+            - **JSON 韌性升級**：增強 `jq` 解析，遇到殘缺前端選單檔案優雅跳過，防止 Pipeline 假性中斷。
             - **沙皇級空間釋放**：抹除 GitHub runner 深層工具包，為韌體封裝騰出極限實體空間。
             - **自癒架構 (Adaptive LTS)**：容忍上游漂移，實現 Hash 動態修復。
             - **進程安全**：引入 `xargs -r kill -9` 確保 CI 環境絕對無殭屍進程殘留。
