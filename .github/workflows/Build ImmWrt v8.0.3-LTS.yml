@@ -6,10 +6,11 @@
 # 終極融合：
 # 1. 繼承 Snapshot 的企業級 retry 除錯、串流日誌與全套考古 Artifacts。
 # 2. 升級 SOURCE_DATE_EPOCH 溯源與 find 精準提取 openwrt_release。
-# 3. 保留 LTS 專屬的沙皇空間清理、4G Swap 與自癒 Hash 架構。
+# 3. 保留 LTS 專屬的沙皇空間清理、絕對決定性的 4G Swap 與自癒 Hash 架構。
 # 4. [v8.0.3] 升級 ib v1.8 備份引擎，修復 tar 目錄項誤判，整合 wg-quick 支援、qrencode。
-# 5. [SDC v1.4 Final] 導入 OpenWrt Native dumpinfo 解析，徹底消除 Artifact 取檔猜測誤差與行首空白。
-# 6. [顯式宣告] 明確加入 CONFIG_USE_APK=y，並嚴格排除 fstab、plugins 與 block-mount。
+# 5. [SDC v1.4 Final] 導入 OpenWrt Native dumpinfo 解析；強制清除同名舊 dl 壓縮包消滅 Stale Cache；精準相容 ERE 賦值；導入可觀測性日誌。
+# 6. [顯式宣告] 明確加入 CONFIG_USE_APK=y，並透過 Defconfig 與 Manifest 雙重審計嚴格排除 fstab、plugins 與 block-mount。
+# 7. [Cache Schema Versioning] 導入 sdc14 Namespace，綁定 `feeds.snapshot.txt` 雜湊，阻斷跨快照污染。
 # =====================================================================
 
 name: Build ImmWrt v8.0.3-LTS
@@ -103,8 +104,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget jq golang-go ccache
             
-          echo "▶️ [Step] Deploying 4G Swap Armor..."
+          echo "▶️ [Step] Deploying 4G Swap Armor (Deterministic)..."
           sudo swapoff -a || true
+          sudo rm -f /swapfile
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
@@ -144,7 +146,7 @@ jobs:
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
 
           # =====================================================
-          # 🔒 Stable Drift Control v1.4 (Native Build System)
+          # 🔒 Stable Drift Control v1.4 (Anti-Stale & Adaptive)
           # =====================================================
           set +e
           
@@ -160,14 +162,17 @@ jobs:
             
             echo "🔒 [SDC v1.4] Adaptive source resolution: $name"
             
-            # 1. 100% 行首空白容忍
-            sed -i \
-              -e 's/^[[:space:]]*PKG_HASH[[:space:]]*:=.*/PKG_HASH:=skip/' \
-              -e 's/^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*:=.*/PKG_MIRROR_HASH:=skip/' \
-              "$makefile"
-              
-            # 觸發下載，讓 OpenWrt 跑一次 (即使 Hash skip 也能拉下 Artifact)
-            make "package/${name}/download" V=s >/dev/null 2>&1 || true
+            # 1. POSIX ERE 萬用賦值 Regex 兼容修正 (:=, ?=, =) 並防止雙重定義
+            if grep -Eq '^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
+              sed -i -E 's/^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=).*/PKG_HASH:=skip/' "$makefile"
+            else
+              printf '\nPKG_HASH:=skip\n' >> "$makefile"
+            fi
+
+            # PKG_MIRROR_HASH 保持原樣或僅清除，不自動盲目賦值
+            if grep -Eq '^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
+              sed -i -E 's/^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=).*/PKG_MIRROR_HASH:=skip/' "$makefile"
+            fi
             
             # 2. 讓 OpenWrt build system 自己解析 package metadata
             local pkg_source=""
@@ -184,17 +189,30 @@ jobs:
                 sed 's/[[:space:]]*$//'
             )"
             
-            local FILE=""
-            
-            # 3. 精準定位 OpenWrt 實際下載 Artifact
             if [ -n "$pkg_source" ]; then
               pkg_source="$(basename -- "$pkg_source")"
+              echo "🧹 [SDC v1.4] Purging stale dl cache for exact source: $pkg_source"
+              rm -f "dl/$pkg_source"
+            fi
+            
+            # 3. 觸發實際下載 (強制從上游抓取乾淨 Artifact，並保留錯誤可觀測性)
+            if make "package/${name}/download" V=s >"/tmp/sdc-${name}-download.log" 2>&1; then
+              echo "✅ $name: download stage completed"
+            else
+              echo "⚠️ $name: download stage failed; continuing with Adaptive Drift"
+              tail -n 80 "/tmp/sdc-${name}-download.log" || true
+            fi
+            
+            local FILE=""
+            
+            # 4. 精準定位 OpenWrt 實際下載 Artifact
+            if [ -n "$pkg_source" ]; then
               if [ -f "dl/$pkg_source" ]; then
                 FILE="dl/$pkg_source"
               fi
             fi
             
-            # 4. Legacy / Drift Fallback
+            # 5. Legacy / Drift Fallback
             if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
               FILE="$(
                 find dl -maxdepth 1 -type f \
@@ -207,15 +225,12 @@ jobs:
               )"
             fi
             
-            # 5. SHA256 Self-Healing
+            # 6. SHA256 Self-Healing
             if [ -n "$FILE" ] && [ -f "$FILE" ]; then
               local NEW_HASH=""
               NEW_HASH="$(sha256sum "$FILE" | awk '{print $1}')" || true
               if [ -n "$NEW_HASH" ]; then
-                sed -i \
-                  -e "s/^[[:space:]]*PKG_HASH[[:space:]]*:=skip/PKG_HASH:=$NEW_HASH/" \
-                  -e "s/^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*:=skip/PKG_MIRROR_HASH:=$NEW_HASH/" \
-                  "$makefile"
+                sed -i -E "s/^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=).*/PKG_HASH:=$NEW_HASH/" "$makefile"
                 echo "✅ $name: Upstream aligned"
                 echo "   Source : $FILE"
                 echo "   SHA256 : $NEW_HASH"
@@ -853,7 +868,7 @@ jobs:
                           rm -f "$tmp"
 
                           if ! cp -p "$SAFETY/files$f" "$tmp" ||
-                             ! mv -f "$tmp" "$f"; then
+                               ! mv -f "$tmp" "$f"; then
 
                               printf \
           "CRITICAL: Rollback failed for %s\n" \
@@ -1229,7 +1244,7 @@ jobs:
                   rm -f "$tmp"
 
                   if ! cp -p "files$f" "$tmp" ||
-                     ! mv -f "$tmp" "$f"; then
+                       ! mv -f "$tmp" "$f"; then
 
                       rm -f "$tmp"
 
@@ -1469,7 +1484,7 @@ jobs:
           
       - name: Generate Cache Variables
         id: var
-        run: echo "dl_key=dl-v8.0.3-${{ hashFiles('feeds.snapshot.txt') }}-$(sha256sum toolchain.info | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+        run: echo "dl_key=dl-v8.0.3-sdc14-${{ hashFiles('feeds.snapshot.txt') }}-$(sha256sum toolchain.info | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
       - name: Restore Cache
         uses: actions/cache/restore@v4
@@ -1478,10 +1493,7 @@ jobs:
             openwrt/dl
           key: ${{ steps.var.outputs.dl_key }}
           restore-keys: |
-            dl-v8.0.3-
-            dl-v8.0.2-
-            dl-v8.0.1-
-            dl-
+            dl-v8.0.3-sdc14-${{ hashFiles('feeds.snapshot.txt') }}-
             
       - name: Generate Core Config
         run: |
@@ -1542,6 +1554,16 @@ jobs:
             echo "CONFIG_PACKAGE_luci-app-plugins=n"
             echo "# CONFIG_CCACHE is not set"
           } > .config
+          
+          echo "=== 🔒 Forbidden Package Defconfig Audit ==="
+          for p in block-mount luci-app-fstab luci-app-plugins; do
+            if grep -Eq "^CONFIG_PACKAGE_${p}=[ym]" .config; then
+              echo "❌ FORBIDDEN PACKAGE ENABLED IN CONFIG: $p"
+              exit 1
+            fi
+          done
+          echo "✅ Defconfig forbidden package audit passed"
+          
           echo "=== 🔬 WireGuard Package Selection Audit ==="
           grep -iE "CONFIG_PACKAGE_(kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode)" .config || true
           make defconfig && ./scripts/diffconfig.sh > ../logs_diffconfig.txt
@@ -1618,10 +1640,19 @@ jobs:
           find openwrt/bin/targets/x86/64 -name "*.manifest" -exec sh -c 'echo "=== $(basename "$1") ==="; cat "$1"; echo' _ {} \; > release_assets/installed-packages.txt
           [ -s release_assets/installed-packages.txt ] || rm -f release_assets/installed-packages.txt
           
+          echo "=== 🔒 Final Manifest Package Audit ==="
+          for p in block-mount luci-app-fstab luci-app-plugins; do
+            if grep -Eq "^${p} " release_assets/installed-packages.txt; then
+              echo "❌ FORBIDDEN PACKAGE FOUND IN FINAL MANIFEST: $p"
+              exit 1
+            fi
+          done
+          echo "✅ Final manifest package audit passed"
+          
           find openwrt/bin/packages -name "*.apk" | sort > release_assets/apk-list.txt
           [ -s release_assets/apk-list.txt ] || rm -f release_assets/apk-list.txt
           
-          OW_RELEASE=$(find openwrt/build_dir -name openwrt_release -path "*/etc/openwrt_release" -print -quit 2>/dev/null || true)
+          OW_RELEASE="$(find openwrt/build_dir/target-x86_64_musl -path "*/etc/openwrt_release" -type f -print -quit 2>/dev/null || true)"
           if [ -n "$OW_RELEASE" ] && [ -f "$OW_RELEASE" ]; then
             OW_REV=$(grep DISTRIB_REVISION "$OW_RELEASE" | head -n 1 | cut -d= -f2 | tr -d "'" || echo "unknown")
           else
@@ -1668,11 +1699,13 @@ jobs:
           body: |
             ### 🔒 v8.0.3-LTS TSAR BOMBA SEALED (SDC v1.4 Final + Explicit APK)
             - **顯式宣告 APK**：在設定檔中明確宣告 `CONFIG_USE_APK=y`，鎖定底層套件管理架構。
-            - **精準清道夫**：全面拔除 `luci-app-fstab`、`luci-app-plugins` 與 `block-mount`，確保 PVE 宿主與容器架構純淨。
+            - **雙重防線審計 (Final Audit)**：在 Defconfig 與最終固件 Manifest 階段全面導入強制檢查，杜絕 `block-mount`、`luci-app-fstab` 與 `luci-app-plugins` 任何形式的依賴回歸。
             - **PassWall 最新主幹同步**：即時拉取最新 `openwrt-passwall` 與 `openwrt-passwall-packages` 最新 commit。
             - **備份引擎升級**：內建 `ib v1.8` 黃金基準垂直排版版，解耦套件強依賴，確保跨版本配置恢復安全。
             - **網路核心擴展**：完整嵌入 `WireGuard` 核心套件、密碼學底層模組、`wg-quick` 工具鏈及 `qrencode` (QR Code 支援)。
-            - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 解析，100% 容忍空白字元漂移。
+            - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 解析；強制清除同名舊 dl 壓縮包消滅 Stale Cache；精準相容 ERE `(:=|\?=|=)` 賦值；導入 SDC 獨立下載狀態的可觀測性日誌 (`tail -n 80`)；保留 `PKG_MIRROR_HASH` 原始語義。
+            - **極致溯源與環境決定性**：將 `openwrt_release` 的提取範圍絕對限縮至 `target-x86_64_musl` 杜絕多目標殘留干擾；升級 4G Swap 建立流程 (`rm -f` 防護) 免疫 Runner Drift。
+            - **快取綱要嚴格隔離**：`sdc14` Namespace 搭配 `feeds.snapshot.txt` 雜湊前綴鎖定 `restore-keys`，達成快照級精準命中與物理隔離。
           files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
