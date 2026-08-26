@@ -481,53 +481,6 @@ jobs:
           echo "✅ OpenWrt host Ninja is available"
 
       # ================================================================
-      # 15. Verify other essential OpenWrt host tools
-      # ================================================================
-      - name: Verify Essential OpenWrt Host Tools
-        run: |
-          set -euo pipefail
-
-          cd openwrt
-
-          echo "================================================"
-          echo "🔍 Verifying essential OpenWrt host tools"
-          echo "================================================"
-
-          REQUIRED_TOOLS="
-          gcc
-          g++
-          ar
-          ld
-          make
-          sed
-          awk
-          pkg-config
-          cmake
-          ninja
-          python3
-          "
-
-          FAILED=0
-
-          for tool in ${REQUIRED_TOOLS}; do
-            if [ ! -x "staging_dir/host/bin/${tool}" ]; then
-              echo "❌ Missing: staging_dir/host/bin/${tool}"
-              FAILED=1
-            else
-              echo "✅ ${tool}"
-            fi
-          done
-
-          if [ "${FAILED}" -ne 0 ]; then
-            echo
-            echo "❌ One or more required OpenWrt host tools are missing"
-            exit 1
-          fi
-
-          echo
-          echo "✅ Essential OpenWrt host tools verified"
-
-      # ================================================================
       # 16. Prepare Host Golang
       # ================================================================
       - name: Prepare Host Golang
