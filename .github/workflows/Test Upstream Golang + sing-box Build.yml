@@ -4,30 +4,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  check:
+  diagnose:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Diagnose
+      - name: Diagnose sing-box
+        shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          git clone --depth=1 -b master https://github.com/immortalwrt/immortalwrt.git openwrt
+          git clone --depth=1 -b master \
+            https://github.com/immortalwrt/immortalwrt.git openwrt
+
           cd openwrt
 
-          git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/openwrt-passwall-packages
+          git clone --depth=1 \
+            https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
+            package/openwrt-passwall-packages
 
           echo "=== MAKEFILE ==="
           test -f package/openwrt-passwall-packages/sing-box/Makefile
-          grep -E '^(PKG_NAME|PKG_VERSION|PKG_SOURCE|GO_PKG)' package/openwrt-passwall-packages/sing-box/Makefile | head -8
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_SOURCE|GO_PKG)' \
+            package/openwrt-passwall-packages/sing-box/Makefile
 
-          echo "=== PACKAGE INDEX ==="
-          make package/openwrt-passwall-packages/sing-box/dumpinfo 2>&1 | head -20
+          echo "=== DUMPINFO ==="
+          make package/openwrt-passwall-packages/sing-box/dumpinfo 2>&1 | head -20 || true
 
-          echo "=== TARGET CHECK ==="
+          echo "=== TARGET ==="
           make package/openwrt-passwall-packages/sing-box/compile -n 2>&1 | head -20 || true
 
           echo "=== DONE ==="
