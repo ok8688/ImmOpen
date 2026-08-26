@@ -1,4 +1,3 @@
-
 name: TEST - Sing-box Target Audit
 
 on:
@@ -351,4 +350,3 @@ jobs:
 
           echo
           echo "RESULT: PASS"
-```
