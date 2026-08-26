@@ -1,4 +1,4 @@
-name: 🧪 SNAPSHOT libgcc_s Source Location
+name: 🧪 SNAPSHOT libgcc_s Toolchain Locate
 
 on:
   workflow_dispatch:
@@ -6,20 +6,16 @@ on:
 jobs:
   locate-libgcc:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Clone SNAPSHOT
+      - name: Checkout SNAPSHOT
         run: |
           set -euo pipefail
           git clone --depth=1 -b master \
             https://github.com/immortalwrt/immortalwrt.git openwrt
           cd openwrt
-          echo "=== REVISION ==="
-          git rev-parse --short HEAD
+          echo "REV=$(git rev-parse --short HEAD)"
 
       - name: Update Feeds
         run: |
@@ -27,7 +23,7 @@ jobs:
           cd openwrt
           ./scripts/feeds update -a >/dev/null 2>&1
 
-      - name: Prepare Minimal Config
+      - name: Build Toolchain Only
         run: |
           set -euo pipefail
           cd openwrt
@@ -36,60 +32,31 @@ jobs:
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
-          CONFIG_PACKAGE_libgcc1=y
           EOF
 
           make defconfig >/dev/null 2>&1
+          make toolchain/install -j"$(nproc)" >/dev/null 2>&1
 
       - name: Locate libgcc_s
         run: |
           set -euo pipefail
           cd openwrt
 
-          {
-            echo "=== TOOLCHAIN CONFIG ==="
-            grep -E \
-              '^CONFIG_(GCC_VERSION|USE_MUSL|TARGET_x86_64)' \
-              .config || true
+          echo "=== TOOLCHAIN DIRS ==="
+          find staging_dir -maxdepth 2 -type d -name 'toolchain-*' -print
 
-            echo
-            echo "=== TOOLCHAIN DIR ==="
-            find staging_dir \
-              -maxdepth 2 \
-              -type d \
-              -name 'toolchain-*' \
-              -print
+          echo "=== libgcc_s ==="
+          find staging_dir build_dir -type f \
+            \( -name 'libgcc_s.so' -o -name 'libgcc_s.so.*' \) \
+            -print 2>/dev/null
 
-            echo
-            echo "=== libgcc_s ==="
-            find staging_dir build_dir \
-              -type f \
-              \( \
-                -name 'libgcc_s.so' \
-                -o -name 'libgcc_s.so.*' \
-              \) \
-              -print 2>/dev/null || true
+          echo "=== EXPECTED PATH ==="
+          EXPECTED="staging_dir/toolchain-x86_64_gcc-14.4.0_musl/lib"
+          echo "$EXPECTED"
 
-            echo
-            echo "=== GCC LIBRARY ==="
-            find staging_dir \
-              -type f \
-              -name 'libgcc*' \
-              -print 2>/dev/null | head -30
-
-            echo
-            echo "=== TOOLCHAIN MAKEFILE ==="
-            grep -n \
-              'libgcc_s.so' \
-              package/libs/toolchain/Makefile || true
-          } > ../libgcc-location.txt
-
-          cat ../libgcc-location.txt
-
-      - name: Upload Result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: libgcc-location-result
-          path: libgcc-location.txt
-          retention-days: 7
+          if [ -d "$EXPECTED" ]; then
+            echo "EXPECTED_DIR=EXISTS"
+            find "$EXPECTED" -maxdepth 1 -type f -printf '%f\n' | sort
+          else
+            echo "EXPECTED_DIR=MISSING"
+          fi
