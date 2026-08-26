@@ -1,47 +1,57 @@
-name: SNAPSHOT sing-box Root Cause Probe
+name: SNAPSHOT - sing-box Fault Reproduction
 
 on:
   workflow_dispatch:
 
 jobs:
-  probe:
+  reproduce:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 120
 
     steps:
-      - name: Checkout
+      - name: Checkout ImmortalWrt
         uses: actions/checkout@v4
+        with:
+          repository: immortalwrt/immortalwrt
+          ref: d2dc130d7f8341741df04eaaf5fd4c74dcc447d7
+          path: openwrt
+          fetch-depth: 1
 
-      - name: Probe sing-box
-        shell: bash
+      - name: Prepare PassWall Sources
         run: |
           set -euo pipefail
-
-          git clone --depth=1 -b master \
-            https://github.com/immortalwrt/immortalwrt.git openwrt >/dev/null 2>&1
-
           cd openwrt
-
-          ./scripts/feeds update -a >/dev/null 2>&1
-
-          git clone --depth=1 \
-            https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
-            package/openwrt-passwall-packages >/dev/null 2>&1
 
           git clone --depth=1 \
             https://github.com/Openwrt-Passwall/openwrt-passwall.git \
-            package/openwrt-passwall >/dev/null 2>&1
+            package/openwrt-passwall
 
-          ./scripts/feeds install -a -f >/dev/null 2>&1
+          git clone --depth=1 \
+            https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
+            package/openwrt-passwall-packages
+
+          cd package/openwrt-passwall
+          git fetch --depth=1 origin f2330bb1f9201fa0eee4369121ae35a9e35e0135
+          git checkout f2330bb1f9201fa0eee4369121ae35a9e35e0135
+
+          cd ../openwrt-passwall-packages
+          git fetch --depth=1 origin a8302d598ca54cda22f7fe76fa553b3df034f8ae
+          git checkout a8302d598ca54cda22f7fe76fa553b3df034f8ae
+
+      - name: Prepare Build
+        run: |
+          set -euo pipefail
+          cd openwrt
 
           cat > .config <<'EOF'
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
-          CONFIG_USE_APK=y
           CONFIG_PACKAGE_sing-box=y
-          CONFIG_PACKAGE_luci-app-passwall=y
           EOF
+
+          ./scripts/feeds update -a >/dev/null 2>&1 || true
+          ./scripts/feeds install -a -f >/dev/null 2>&1 || true
 
           make defconfig >/dev/null 2>&1
 
@@ -50,24 +60,41 @@ jobs:
           echo "PassWall: $(git -C package/openwrt-passwall rev-parse HEAD)"
           echo "PassWall-Packages: $(git -C package/openwrt-passwall-packages rev-parse HEAD)"
 
-          echo "=== SING-BOX MAKEFILE ==="
-          grep -E '^(PKG_NAME|PKG_VERSION|PKG_SOURCE|PKG_HASH|GO_PKG|GO_PKG_LDFLAGS|GO_FLAGS|GO_BUILD_FLAGS|PKG_BUILD_DEPENDS)' \
-            package/openwrt-passwall-packages/sing-box/Makefile || true
+          echo "=== SING-BOX ==="
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_SOURCE|PKG_HASH|PKG_BUILD_DEPENDS|GO_PKG|GO_PKG_BUILD_PKG)' \
+            package/openwrt-passwall-packages/sing-box/Makefile
 
-          echo "=== GO ==="
-          command -v go || true
-          go version 2>/dev/null || true
+      - name: Build sing-box Only
+        run: |
+          set -euo pipefail
+          cd openwrt
 
-          echo "=== GCC ==="
-          gcc --version | head -1
+          set +e
+          make package/openwrt-passwall-packages/sing-box/compile -j1 V=s \
+            2>&1 | tee /tmp/sing-box-build.log
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          echo
+          echo "=== RESULT ==="
+
+          if [ "$RC" -ne 0 ]; then
+            echo "SING_BOX_BUILD=FAILED"
+            echo "=== LAST 120 LINES ==="
+            tail -n 120 /tmp/sing-box-build.log
+            exit "$RC"
+          fi
+
+          echo "SING_BOX_BUILD=SUCCESS"
 
           echo "=== LIBGCC ==="
           find staging_dir build_dir \
             -type f \( -name 'libgcc_s.so' -o -name 'libgcc_s.so.*' \) \
-            -print 2>/dev/null | head -10
+            -print 2>/dev/null | head -20
 
-          echo "=== SING-BOX SOURCE ==="
-          grep -nE 'Build/Compile|go build|go install|CGO_ENABLED|CC=|CXX=' \
-            package/openwrt-passwall-packages/sing-box/Makefile | head -20 || true
-
-          echo "=== DONE ==="
+      - name: Upload Failure Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-singbox-fault-log
+          path: /tmp/sing-box-build.log
