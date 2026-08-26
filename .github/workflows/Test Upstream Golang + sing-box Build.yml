@@ -1,62 +1,49 @@
-name: 🧪 SNAPSHOT libgcc_s Toolchain Locate
+name: 🧪 SNAPSHOT GCC libgcc_s Source Locate
 
 on:
   workflow_dispatch:
 
 jobs:
-  locate-libgcc:
+  locate-libgcc-source:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout SNAPSHOT
         run: |
           set -euo pipefail
           git clone --depth=1 -b master \
-            https://github.com/immortalwrt/immortalwrt.git openwrt
+            https://github.com/immortalwrt/immortalwrt.git openwrt >/dev/null 2>&1
           cd openwrt
           echo "REV=$(git rev-parse --short HEAD)"
 
-      - name: Update Feeds
-        run: |
-          set -euo pipefail
-          cd openwrt
-          ./scripts/feeds update -a >/dev/null 2>&1
-
-      - name: Build Toolchain Only
+      - name: Locate GCC libgcc_s Logic
         run: |
           set -euo pipefail
           cd openwrt
 
-          cat > .config <<'EOF'
-          CONFIG_TARGET_x86=y
-          CONFIG_TARGET_x86_64=y
-          CONFIG_TARGET_x86_64_DEVICE_generic=y
-          EOF
+          {
+            echo "=== GCC SOURCE ==="
+            grep -RniE \
+              'libgcc_s\.so|install.*libgcc|libgcc.*install|gcc.*final' \
+              toolchain/gcc \
+              2>/dev/null | head -40
 
-          make defconfig >/dev/null 2>&1
-          make toolchain/install -j"$(nproc)" >/dev/null 2>&1
+            echo
+            echo "=== TOOLCHAIN DIR ==="
+            grep -nE \
+              'TOOLCHAIN_DIR_NAME|TOOLCHAIN_DIR=' \
+              rules.mk
 
-      - name: Locate libgcc_s
-        run: |
-          set -euo pipefail
-          cd openwrt
+            echo
+            echo "=== LIBGCC VARIABLES ==="
+            grep -nE \
+              '^LIBGCC_(S|A)|libgcc_s\.so' \
+              rules.mk
 
-          echo "=== TOOLCHAIN DIRS ==="
-          find staging_dir -maxdepth 2 -type d -name 'toolchain-*' -print
-
-          echo "=== libgcc_s ==="
-          find staging_dir build_dir -type f \
-            \( -name 'libgcc_s.so' -o -name 'libgcc_s.so.*' \) \
-            -print 2>/dev/null
-
-          echo "=== EXPECTED PATH ==="
-          EXPECTED="staging_dir/toolchain-x86_64_gcc-14.4.0_musl/lib"
-          echo "$EXPECTED"
-
-          if [ -d "$EXPECTED" ]; then
-            echo "EXPECTED_DIR=EXISTS"
-            find "$EXPECTED" -maxdepth 1 -type f -printf '%f\n' | sort
-          else
-            echo "EXPECTED_DIR=MISSING"
-          fi
+            echo
+            echo "=== PACKAGE TOOLCHAIN ==="
+            grep -nE \
+              'LIBGCC_SO|libgcc_s\.so' \
+              package/libs/toolchain/Makefile
+          } | tee ../libgcc-source.txt
