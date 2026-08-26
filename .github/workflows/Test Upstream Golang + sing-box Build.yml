@@ -1,49 +1,35 @@
-name: 🧪 SNAPSHOT GCC libgcc_s Source Locate
+name: SNAPSHOT - GCC final libgcc_s final probe
 
 on:
   workflow_dispatch:
 
 jobs:
-  locate-libgcc-source:
+  probe:
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
 
     steps:
-      - name: Checkout SNAPSHOT
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare OpenWrt
         run: |
           set -euo pipefail
-          git clone --depth=1 -b master \
-            https://github.com/immortalwrt/immortalwrt.git openwrt >/dev/null 2>&1
+          git clone --depth=1 -b master https://github.com/immortalwrt/immortalwrt.git openwrt
           cd openwrt
-          echo "REV=$(git rev-parse --short HEAD)"
+          echo 'CONFIG_TARGET_x86=y
+          CONFIG_TARGET_x86_64=y
+          CONFIG_TARGET_x86_64_DEVICE_generic=y' > .config
+          make defconfig >/dev/null 2>&1
 
-      - name: Locate GCC libgcc_s Logic
+      - name: GCC final libgcc_s probe
         run: |
           set -euo pipefail
           cd openwrt
 
-          {
-            echo "=== GCC SOURCE ==="
-            grep -RniE \
-              'libgcc_s\.so|install.*libgcc|libgcc.*install|gcc.*final' \
-              toolchain/gcc \
-              2>/dev/null | head -40
+          make toolchain/gcc/final/compile -j"$(nproc)" >/dev/null 2>&1
 
-            echo
-            echo "=== TOOLCHAIN DIR ==="
-            grep -nE \
-              'TOOLCHAIN_DIR_NAME|TOOLCHAIN_DIR=' \
-              rules.mk
+          echo "=== GCC FINAL ==="
+          find build_dir -type f \( -name 'libgcc_s.so' -o -name 'libgcc_s.so.*' \) -print 2>/dev/null | head -20
 
-            echo
-            echo "=== LIBGCC VARIABLES ==="
-            grep -nE \
-              '^LIBGCC_(S|A)|libgcc_s\.so' \
-              rules.mk
-
-            echo
-            echo "=== PACKAGE TOOLCHAIN ==="
-            grep -nE \
-              'LIBGCC_SO|libgcc_s\.so' \
-              package/libs/toolchain/Makefile
-          } | tee ../libgcc-source.txt
+          echo "=== TOOLCHAIN LIB ==="
+          find staging_dir -path '*/lib/libgcc_s.so*' -print 2>/dev/null | head -20
