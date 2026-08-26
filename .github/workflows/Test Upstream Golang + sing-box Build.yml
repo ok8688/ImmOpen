@@ -1,4 +1,4 @@
-```yaml
+
 name: TEST - Sing-box Target Audit
 
 on:
@@ -156,17 +156,6 @@ jobs:
 
       # ================================================================
       # 7. Prepare OpenWrt host tool: ninja
-      #
-      # IMPORTANT:
-      # package/system/apk host-compile uses:
-      #
-      #   $(STAGING_DIR_HOST)/bin/ninja
-      #
-      # Ubuntu's /usr/local/bin/ninja is NOT sufficient.
-      #
-      # Build the OpenWrt-native ninja into:
-      #
-      #   staging_dir/host/bin/ninja
       # ================================================================
       - name: Prepare OpenWrt host ninja
         shell: bash
@@ -242,16 +231,6 @@ jobs:
 
       # ================================================================
       # 9. Verify APK host Meson/Ninja build
-      #
-      # This is the critical diagnostic step.
-      #
-      # Previous failure:
-      #
-      # ninja: fatal: chdir to
-      # build_dir/hostpkg/apk-3.0.5/openwrt-build
-      # No such file or directory
-      #
-      # Therefore APK host-compile must pass before testing sing-box.
       # ================================================================
       - name: Verify APK host Meson/Ninja build
         shell: bash
