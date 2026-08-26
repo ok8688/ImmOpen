@@ -1,19 +1,19 @@
-name: 🧪 Test Upstream Golang + PassWall sing-box
+name: 🧪 Diagnose libgcc_s Location
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  diagnose-libgcc:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 20
 
     steps:
 
-      - name: Checkout
+      - name: Checkout Repo
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Build Dependencies
         run: |
           set -euo pipefail
 
@@ -23,6 +23,7 @@ jobs:
             clang \
             flex \
             bison \
+            g++ \
             gawk \
             gcc-multilib \
             gettext \
@@ -39,7 +40,7 @@ jobs:
             ninja-build \
             meson
 
-      - name: Prepare ImmortalWrt
+      - name: Clone ImmortalWrt Master
         run: |
           set -euo pipefail
 
@@ -51,53 +52,19 @@ jobs:
 
           cd openwrt
 
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a -f
+          echo "ImmortalWrt:"
+          git rev-parse HEAD
 
-      - name: Replace Golang and PassWall sing-box
+      - name: Update And Install Feeds
         run: |
           set -euo pipefail
 
           cd openwrt
 
-          # Replace ONLY Golang with current upstream OpenWrt/packages.
-          rm -rf feeds/packages/lang/golang
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a -f
 
-          git clone \
-            --depth=1 \
-            https://github.com/openwrt/packages.git \
-            /tmp/openwrt-packages
-
-          cp -a \
-            /tmp/openwrt-packages/lang/golang \
-            feeds/packages/lang/golang
-
-          # Remove OpenWrt's built-in PassWall core packages.
-          rm -rf \
-            feeds/packages/net/xray-core \
-            feeds/packages/net/v2ray-geodata \
-            feeds/packages/net/sing-box
-
-          # Add PassWall packages.
-          git clone \
-            --depth=1 \
-            https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
-            package/passwall-packages
-
-          echo "ImmortalWrt:"
-          git rev-parse HEAD
-
-          echo "OpenWrt/packages:"
-          git -C /tmp/openwrt-packages rev-parse HEAD
-
-          echo "PassWall packages:"
-          git -C package/passwall-packages rev-parse HEAD
-
-          echo
-          echo "sing-box Makefile:"
-          test -f package/passwall-packages/sing-box/Makefile
-
-      - name: Configure
+      - name: Generate Minimal Config
         run: |
           set -euo pipefail
 
@@ -107,154 +74,181 @@ jobs:
           CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
-          CONFIG_PACKAGE_sing-box=y
           EOF
 
           make defconfig
 
-          echo
-          grep -E \
-            '^(CONFIG_TARGET_x86|CONFIG_TARGET_x86_64|CONFIG_USE_APK|CONFIG_PACKAGE_sing-box)=' \
-            .config
-
-      - name: Install OpenWrt host tools
+      - name: Build Toolchain
         run: |
           set -euo pipefail
 
           cd openwrt
 
-          make tools/install -j"$(nproc)"
-
-          test -x staging_dir/host/bin/ninja
-          staging_dir/host/bin/ninja --version
-
-      - name: Build Host Golang
-        run: |
-          set -euo pipefail
-
-          cd openwrt
-
-          mkdir -p ../diagnostics
-
-          set +e
-
-          make package/golang/host/compile \
+          make toolchain/install \
             -j"$(nproc)" \
-            V=s \
-            2>&1 | tee ../diagnostics/golang-build.log
+            V=s
 
-          rc=${PIPESTATUS[0]}
-
-          set -e
-
-          echo "${rc}" > ../diagnostics/golang-exit-code.txt
-
-          exit "${rc}"
-
-      - name: Build PassWall sing-box
+      - name: Locate libgcc_s
         run: |
           set -euo pipefail
 
           cd openwrt
 
-          mkdir -p ../diagnostics
+          echo "===== GCC ====="
 
-          set +e
-
-          make package/passwall-packages/sing-box/compile \
-            -j"$(nproc)" \
-            V=s \
-            2>&1 | tee ../diagnostics/singbox-build.log
-
-          rc=${PIPESTATUS[0]}
-
-          set -e
-
-          echo "${rc}" > ../diagnostics/singbox-exit-code.txt
-
-          exit "${rc}"
-
-      - name: Verify result
-        if: success()
-        run: |
-          set -euo pipefail
-
-          cd openwrt
-
-          echo "===== Host Go ====="
-
-          find staging_dir/hostpkg/lib \
-            -type f \
-            -path '*/bin/go' \
-            ! -path '*/go-bootstrap/*' \
-            -print
-
-          GO_BIN="$(
-            find staging_dir/hostpkg/lib \
+          GCC_BIN="$(
+            find staging_dir/toolchain-x86_64_* \
               -type f \
-              -path '*/bin/go' \
-              ! -path '*/go-bootstrap/*' \
-              | sort -V \
-              | tail -n 1
+              -name 'x86_64-openwrt-linux-musl-gcc' \
+              | head -n 1
           )"
 
-          test -n "${GO_BIN}"
-          "${GO_BIN}" version
+          if [ -z "${GCC_BIN}" ]; then
+            echo "❌ OpenWrt target GCC not found"
+            exit 1
+          fi
+
+          echo "GCC: ${GCC_BIN}"
+          "${GCC_BIN}" --version | head -n 1
 
           echo
-          echo "===== OpenWrt Ninja ====="
-          staging_dir/host/bin/ninja --version
+          echo "===== GCC libgcc_s Resolution ====="
+
+          LIBGCC="$(
+            "${GCC_BIN}" \
+              -print-file-name=libgcc_s.so
+          )"
+
+          echo "GCC reports:"
+          echo "${LIBGCC}"
 
           echo
-          echo "===== sing-box artifact ====="
+          echo "===== libgcc_s Files ====="
 
-          find bin packages \
+          find staging_dir \
             -type f \
-            \( \
-              -name '*sing-box*.apk' \
-              -o \
-              -name '*sing-box*.ipk' \
-            \) \
-            -print
+            -name 'libgcc_s.so*' \
+            -print \
+            | sort
 
-      - name: Collect diagnostics
+          echo
+          echo "===== Expected Directory ====="
+
+          TOOLCHAIN_DIR="$(
+            dirname \
+              "$(dirname \
+                "$(dirname "${GCC_BIN}")")"
+          )"
+
+          echo "${TOOLCHAIN_DIR}/lib/"
+
+          echo
+          echo "===== Expected Directory Contents ====="
+
+          ls -lah \
+            "${TOOLCHAIN_DIR}/lib/" \
+            2>/dev/null || true
+
+          echo
+          echo "===== GCC Search Result ====="
+
+          if [ -e "${LIBGCC}" ]; then
+            echo "✅ GCC resolved libgcc_s successfully"
+            readlink -f "${LIBGCC}" || true
+          else
+            echo "❌ GCC did NOT resolve libgcc_s"
+          fi
+
+          echo
+          echo "===== Final Diagnosis ====="
+
+          EXPECTED_GLOB="${TOOLCHAIN_DIR}/lib/libgcc_s.so.*"
+
+          if compgen -G "${EXPECTED_GLOB}" > /dev/null; then
+            echo "✅ EXPECTED libgcc_s EXISTS"
+            printf '%s\n' ${EXPECTED_GLOB}
+          else
+            echo "❌ EXPECTED libgcc_s DOES NOT EXIST"
+          fi
+
+      - name: Verify Toolchain Package Failure Condition
+        run: |
+          set -euo pipefail
+
+          cd openwrt
+
+          TOOLCHAIN_DIR="$(
+            find staging_dir \
+              -maxdepth 1 \
+              -type d \
+              -name 'toolchain-x86_64_*' \
+              | head -n 1
+          )"
+
+          echo "Toolchain staging:"
+          echo "${TOOLCHAIN_DIR}"
+
+          echo
+          echo "libgcc_s candidates:"
+          find "${TOOLCHAIN_DIR}" \
+            -type f \
+            -name 'libgcc_s.so*' \
+            -print \
+            | sort
+
+          echo
+          echo "Exact path used by failing Makefile:"
+          ls -l \
+            "${TOOLCHAIN_DIR}/lib/libgcc_s.so."* \
+            2>/dev/null \
+            || echo "❌ EXACT FAILING PATH DOES NOT EXIST"
+
+      - name: Collect Diagnostic
         if: always()
         run: |
           set +e
 
           mkdir -p diagnostics
 
-          if [ -d openwrt ]; then
-            git -C openwrt rev-parse HEAD \
-              > diagnostics/immortalwrt-revision.txt 2>&1
+          {
+            echo "ImmortalWrt:"
+            git -C openwrt rev-parse HEAD
 
-            git -C openwrt/package/passwall-packages rev-parse HEAD \
-              > diagnostics/passwall-packages-revision.txt 2>&1
+            echo
+            echo "Toolchain directories:"
+            find openwrt/staging_dir \
+              -maxdepth 1 \
+              -type d \
+              -name 'toolchain-*' \
+              -print
 
-            git -C /tmp/openwrt-packages rev-parse HEAD \
-              > diagnostics/openwrt-packages-revision.txt 2>&1
+            echo
+            echo "All libgcc_s:"
+            find openwrt/staging_dir \
+              -type f \
+              -name 'libgcc_s.so*' \
+              -print
 
-            cp openwrt/.config diagnostics/openwrt.config
+            echo
+            echo "GCC:"
+            find openwrt/staging_dir \
+              -type f \
+              -name 'x86_64-openwrt-linux-musl-gcc' \
+              -print
 
-            cp \
-              openwrt/feeds/packages/lang/golang/golang/Makefile \
-              diagnostics/golang-Makefile 2>/dev/null
+            echo
+            echo "Toolchain Makefile libgcc references:"
+            grep -n \
+              'libgcc_s' \
+              openwrt/package/libs/toolchain/Makefile \
+              2>/dev/null || true
 
-            cp \
-              openwrt/package/passwall-packages/sing-box/Makefile \
-              diagnostics/sing-box-Makefile 2>/dev/null
+          } > diagnostics/libgcc-location.txt
 
-            if [ -x openwrt/staging_dir/host/bin/ninja ]; then
-              openwrt/staging_dir/host/bin/ninja --version \
-                > diagnostics/openwrt-ninja-version.txt 2>&1
-            fi
-          fi
-
-      - name: Upload diagnostics
+      - name: Upload Diagnostic
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: singbox-golang-test
+          name: libgcc-location-diagnostic
           path: diagnostics/
-          if-no-files-found: warn
           retention-days: 7
