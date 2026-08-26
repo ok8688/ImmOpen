@@ -1,4 +1,4 @@
-name: SNAPSHOT - GCC final libgcc_s final probe
+name: SNAPSHOT sing-box Root Cause Probe
 
 on:
   workflow_dispatch:
@@ -6,30 +6,68 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare OpenWrt
+      - name: Probe sing-box
+        shell: bash
         run: |
           set -euo pipefail
-          git clone --depth=1 -b master https://github.com/immortalwrt/immortalwrt.git openwrt
+
+          git clone --depth=1 -b master \
+            https://github.com/immortalwrt/immortalwrt.git openwrt >/dev/null 2>&1
+
           cd openwrt
-          echo 'CONFIG_TARGET_x86=y
+
+          ./scripts/feeds update -a >/dev/null 2>&1
+
+          git clone --depth=1 \
+            https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git \
+            package/openwrt-passwall-packages >/dev/null 2>&1
+
+          git clone --depth=1 \
+            https://github.com/Openwrt-Passwall/openwrt-passwall.git \
+            package/openwrt-passwall >/dev/null 2>&1
+
+          ./scripts/feeds install -a -f >/dev/null 2>&1
+
+          cat > .config <<'EOF'
+          CONFIG_TARGET_x86=y
           CONFIG_TARGET_x86_64=y
-          CONFIG_TARGET_x86_64_DEVICE_generic=y' > .config
+          CONFIG_TARGET_x86_64_DEVICE_generic=y
+          CONFIG_USE_APK=y
+          CONFIG_PACKAGE_sing-box=y
+          CONFIG_PACKAGE_luci-app-passwall=y
+          EOF
+
           make defconfig >/dev/null 2>&1
 
-      - name: GCC final libgcc_s probe
-        run: |
-          set -euo pipefail
-          cd openwrt
+          echo "=== COMMITS ==="
+          echo "ImmortalWrt: $(git rev-parse HEAD)"
+          echo "PassWall: $(git -C package/openwrt-passwall rev-parse HEAD)"
+          echo "PassWall-Packages: $(git -C package/openwrt-passwall-packages rev-parse HEAD)"
 
-          make toolchain/gcc/final/compile -j"$(nproc)" >/dev/null 2>&1
+          echo "=== SING-BOX MAKEFILE ==="
+          grep -E '^(PKG_NAME|PKG_VERSION|PKG_SOURCE|PKG_HASH|GO_PKG|GO_PKG_LDFLAGS|GO_FLAGS|GO_BUILD_FLAGS|PKG_BUILD_DEPENDS)' \
+            package/openwrt-passwall-packages/sing-box/Makefile || true
 
-          echo "=== GCC FINAL ==="
-          find build_dir -type f \( -name 'libgcc_s.so' -o -name 'libgcc_s.so.*' \) -print 2>/dev/null | head -20
+          echo "=== GO ==="
+          command -v go || true
+          go version 2>/dev/null || true
 
-          echo "=== TOOLCHAIN LIB ==="
-          find staging_dir -path '*/lib/libgcc_s.so*' -print 2>/dev/null | head -20
+          echo "=== GCC ==="
+          gcc --version | head -1
+
+          echo "=== LIBGCC ==="
+          find staging_dir build_dir \
+            -type f \( -name 'libgcc_s.so' -o -name 'libgcc_s.so.*' \) \
+            -print 2>/dev/null | head -10
+
+          echo "=== SING-BOX SOURCE ==="
+          grep -nE 'Build/Compile|go build|go install|CGO_ENABLED|CC=|CXX=' \
+            package/openwrt-passwall-packages/sing-box/Makefile | head -20 || true
+
+          echo "=== DONE ==="
