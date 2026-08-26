@@ -113,8 +113,8 @@ jobs:
 
           cd /tmp/openwrt-packages
 
-          git log -1 --oneline
-          git rev-parse HEAD
+          git log -1 --oneline | tee /tmp/openwrt-packages-revision.txt
+          git rev-parse HEAD | tee -a /tmp/openwrt-packages-revision.txt
 
           cd -
 
@@ -151,7 +151,11 @@ jobs:
             -print
 
       # ================================================================
-      # 7. Install base feeds
+      # 7. Install ImmortalWrt feeds
+      #
+      # IMPORTANT:
+      # PassWall official README method 2 performs feeds install first,
+      # then removes the OpenWrt built-in core packages.
       # ================================================================
       - name: Install Base Feeds
         run: |
@@ -160,62 +164,57 @@ jobs:
           cd openwrt
 
           echo "================================================"
-          echo "📦 Installing base feeds"
+          echo "📦 Installing ImmortalWrt feeds"
           echo "================================================"
 
           ./scripts/feeds install -a -f
 
       # ================================================================
-      # 8. Remove OpenWrt built-in PassWall core packages
+      # 8. Remove ONLY built-in sing-box
       #
-      # This follows PassWall's documented installation method:
-      # remove built-in core packages before cloning PassWall packages.
+      # This follows PassWall's documented method:
+      #
+      #   rm -rf feeds/packages/net/{...,sing-box,...}
+      #
+      # We intentionally remove ONLY sing-box because this test is
+      # specifically isolating the PassWall sing-box + upstream Go path.
       # ================================================================
-      - name: Remove Built-in Core Packages
+      - name: Remove Built-in sing-box
         run: |
           set -euo pipefail
 
           cd openwrt
 
           echo "================================================"
-          echo "🗑️ Removing built-in OpenWrt core packages"
+          echo "🗑️ Removing built-in OpenWrt sing-box"
           echo "================================================"
 
-          rm -rf feeds/packages/net/{ \
-            xray-core, \
-            v2ray-geodata, \
-            sing-box, \
-            chinadns-ng, \
-            dns2socks, \
-            hysteria, \
-            ipt2socks, \
-            microsocks, \
-            naiveproxy, \
-            shadowsocks-rust, \
-            shadowsocksr-libev, \
-            simple-obfs, \
-            tcping, \
-            v2ray-plugin, \
-            xray-plugin, \
-            geoview, \
-            shadow-tls \
-          }
+          if [ -d "feeds/packages/net/sing-box" ]; then
+            rm -rf "feeds/packages/net/sing-box"
+            echo "✅ Removed feeds/packages/net/sing-box"
+          else
+            echo "ℹ️ feeds/packages/net/sing-box does not exist"
+          fi
 
           echo
-          echo "===== Built-in sing-box Check ====="
+          echo "===== Verify built-in sing-box ====="
 
-          if find feeds -type f -path '*/sing-box/Makefile' -print | grep -q .; then
-            echo "❌ Built-in sing-box Makefile still exists"
-            find feeds -type f -path '*/sing-box/Makefile' -print
+          if [ -e "feeds/packages/net/sing-box" ]; then
+            echo "❌ Built-in sing-box still exists"
+            find "feeds/packages/net/sing-box" \
+              -maxdepth 3 \
+              -type f \
+              -print \
+              2>/dev/null || true
             exit 1
           fi
 
-          echo "✅ Built-in sing-box removed"
+          echo "✅ Built-in sing-box successfully removed"
 
       # ================================================================
       # 9. Clone PassWall packages
       #
-      # sing-box comes from this repository.
+      # sing-box is provided by this repository.
       # ================================================================
       - name: Clone PassWall Packages
         run: |
@@ -235,15 +234,14 @@ jobs:
           echo
           echo "===== PassWall Packages Revision ====="
 
-          cd package/passwall-packages
-
-          git log -1 --oneline
-          git rev-parse HEAD
-
-          cd ../..
+          git -C package/passwall-packages log -1 --oneline
+          git -C package/passwall-packages rev-parse HEAD
 
       # ================================================================
       # 10. Clone PassWall LuCI
+      #
+      # This is NOT the source of sing-box.
+      # It is included to reproduce the official PassWall package layout.
       # ================================================================
       - name: Clone PassWall LuCI
         run: |
@@ -263,12 +261,8 @@ jobs:
           echo
           echo "===== PassWall LuCI Revision ====="
 
-          cd package/passwall-luci
-
-          git log -1 --oneline
-          git rev-parse HEAD
-
-          cd ../..
+          git -C package/passwall-luci log -1 --oneline
+          git -C package/passwall-luci rev-parse HEAD
 
       # ================================================================
       # 11. Verify PassWall sing-box package
@@ -287,8 +281,16 @@ jobs:
 
           if [ ! -f "${SINGBOX_MK}" ]; then
             echo "❌ PassWall sing-box Makefile not found"
+            echo
             echo "Expected:"
             echo "${SINGBOX_MK}"
+            echo
+            echo "Available sing-box Makefiles:"
+            find . \
+              -type f \
+              -path '*/sing-box/Makefile' \
+              -print \
+              2>/dev/null || true
             exit 1
           fi
 
@@ -309,29 +311,7 @@ jobs:
             || true
 
       # ================================================================
-      # 12. Install PassWall package definitions
-      # ================================================================
-      - name: Install PassWall Packages
-        run: |
-          set -euo pipefail
-
-          cd openwrt
-
-          echo "================================================"
-          echo "📦 Installing PassWall package definitions"
-          echo "================================================"
-
-          ./scripts/feeds install -a -f
-
-          echo
-          echo "===== Package Registration Check ====="
-
-          make package/passwall-packages/sing-box/compile \
-            V=s \
-            -n
-
-      # ================================================================
-      # 13. Generate minimal x86_64 configuration
+      # 12. Generate minimal x86_64 configuration
       # ================================================================
       - name: Generate Minimal Config
         run: |
@@ -345,7 +325,6 @@ jobs:
           CONFIG_TARGET_x86_64_DEVICE_generic=y
 
           CONFIG_PACKAGE_sing-box=y
-          CONFIG_PACKAGE_luci-app-passwall=y
           EOF
 
           echo "================================================"
@@ -358,9 +337,30 @@ jobs:
           echo "===== Selected Packages ====="
 
           grep -E \
-            '^CONFIG_PACKAGE_(sing-box|luci-app-passwall)=' \
+            '^CONFIG_PACKAGE_sing-box=' \
             .config
 
+      # ================================================================
+      # 13. Verify sing-box target exists
+      # ================================================================
+      - name: Verify sing-box Build Target
+        run: |
+          set -euo pipefail
+
+          cd openwrt
+
+          echo "================================================"
+          echo "🔍 Verifying sing-box build target"
+          echo "================================================"
+
+          make \
+            package/passwall-packages/sing-box/compile \
+            -n \
+            V=s
+
+          echo
+          echo "✅ sing-box build target exists"
+      
       # ================================================================
       # 14. Prepare Host Golang
       # ================================================================
@@ -409,7 +409,11 @@ jobs:
             V=s
 
       # ================================================================
-      # 17. Verify actual generated Go toolchain
+      # 17. Verify generated Go toolchain
+      #
+      # IMPORTANT:
+      # ImmortalWrt/OpenWrt currently places the compiled Go toolchain
+      # under staging_dir/hostpkg/lib/go-*/bin/go.
       # ================================================================
       - name: Verify Go Toolchain
         run: |
@@ -456,11 +460,11 @@ jobs:
           "${GO_BIN}" env GOVERSION GOOS GOARCH
 
           echo
-          echo "===== Go Root ====="
+          echo "===== GOROOT ====="
           "${GO_BIN}" env GOROOT
 
           echo
-          echo "===== Go Path ====="
+          echo "===== GOPATH ====="
           "${GO_BIN}" env GOPATH
 
       # ================================================================
@@ -476,7 +480,9 @@ jobs:
           echo "🔽 Downloading PassWall sing-box"
           echo "================================================"
 
-          make package/passwall-packages/sing-box/download V=s
+          make \
+            package/passwall-packages/sing-box/download \
+            V=s
 
       # ================================================================
       # 19. Prepare PassWall sing-box
@@ -491,14 +497,18 @@ jobs:
           echo "🧩 Preparing PassWall sing-box"
           echo "================================================"
 
-          make package/passwall-packages/sing-box/prepare V=s
+          make \
+            package/passwall-packages/sing-box/prepare \
+            V=s
 
       # ================================================================
       # 20. Compile PassWall sing-box
       #
       # IMPORTANT:
       # Do NOT use "|| true".
-      # Capture the real exit code while preserving the complete log.
+      #
+      # The complete output is saved to a log while the real make
+      # exit code is preserved.
       # ================================================================
       - name: Compile PassWall sing-box
         id: singbox_compile
@@ -521,7 +531,8 @@ jobs:
 
           set +e
 
-          make package/passwall-packages/sing-box/compile \
+          make \
+            package/passwall-packages/sing-box/compile \
             -j"$(nproc)" \
             V=s \
             2>&1 | tee "${LOG}"
@@ -535,23 +546,24 @@ jobs:
           echo "sing-box build exit code: ${BUILD_RC}"
           echo "================================================"
 
-          echo "${BUILD_RC}" > ../diagnostics/singbox-build-exit-code.txt
+          echo "${BUILD_RC}" \
+            > ../diagnostics/singbox-build-exit-code.txt
 
           exit "${BUILD_RC}"
 
       # ================================================================
-      # 21. Collect complete diagnostic report
+      # 21. Generate complete diagnostic report
       #
-      # Always runs, whether build succeeds or fails.
+      # ALWAYS runs.
       # ================================================================
       - name: Generate Diagnostic Report
         if: always()
         run: |
           set +e
 
-          REPORT="openwrt/../diagnostics/singbox-build-report.txt"
-
           mkdir -p diagnostics
+
+          REPORT="diagnostics/singbox-build-report.txt"
 
           {
             echo "============================================================"
@@ -563,6 +575,7 @@ jobs:
             date -u '+%Y-%m-%dT%H:%M:%SZ'
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[1] RUNNER INFORMATION"
             echo "============================================================"
@@ -582,19 +595,16 @@ jobs:
             df -h
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[2] IMMORTALWRT REVISION"
             echo "============================================================"
 
-            if [ -d openwrt/.git ]; then
-              git -C openwrt log -1 --oneline
-              git -C openwrt rev-parse HEAD
-            else
-              echo "ImmortalWrt git repository unavailable"
-            fi
-
+            git -C openwrt log -1 --oneline 2>/dev/null || true
+            git -C openwrt rev-parse HEAD 2>/dev/null || true
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[3] OPENWRT/PACKAGES GOLANG REVISION"
             echo "============================================================"
@@ -602,37 +612,48 @@ jobs:
             if [ -f /tmp/openwrt-packages-revision.txt ]; then
               cat /tmp/openwrt-packages-revision.txt
             else
-              echo "Revision file not available"
+              echo "Revision file unavailable"
             fi
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[4] PASSWALL PACKAGES REVISION"
             echo "============================================================"
 
-            if [ -d openwrt/package/passwall-packages/.git ]; then
-              git -C openwrt/package/passwall-packages log -1 --oneline
-              git -C openwrt/package/passwall-packages rev-parse HEAD
-            else
-              echo "PassWall packages repository unavailable"
-            fi
+            git -C \
+              openwrt/package/passwall-packages \
+              log -1 \
+              --oneline \
+              2>/dev/null || true
+
+            git -C \
+              openwrt/package/passwall-packages \
+              rev-parse HEAD \
+              2>/dev/null || true
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[5] PASSWALL LUCi REVISION"
             echo "============================================================"
 
-            if [ -d openwrt/package/passwall-luci/.git ]; then
-              git -C openwrt/package/passwall-luci log -1 --oneline
-              git -C openwrt/package/passwall-luci rev-parse HEAD
-            else
-              echo "PassWall LuCI repository unavailable"
-            fi
+            git -C \
+              openwrt/package/passwall-luci \
+              log -1 \
+              --oneline \
+              2>/dev/null || true
+
+            git -C \
+              openwrt/package/passwall-luci \
+              rev-parse HEAD \
+              2>/dev/null || true
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[6] GOLANG VERSION DEFINITIONS"
             echo "============================================================"
@@ -644,6 +665,7 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[7] GENERATED GO TOOLCHAIN"
             echo "============================================================"
@@ -682,40 +704,52 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[8] PASSWALL SING-BOX MAKEFILE"
             echo "============================================================"
 
-            if [ -f openwrt/package/passwall-packages/sing-box/Makefile ]; then
-              cat openwrt/package/passwall-packages/sing-box/Makefile
+            if [ -f \
+              openwrt/package/passwall-packages/sing-box/Makefile \
+            ]; then
+
+              cat \
+                openwrt/package/passwall-packages/sing-box/Makefile
+
             else
               echo "sing-box Makefile unavailable"
             fi
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
-            echo "[9] SING-BOX PACKAGE DIRECTORY"
+            echo "[9] SING-BOX PACKAGE FILES"
             echo "============================================================"
 
-            find openwrt/package/passwall-packages/sing-box \
-              -maxdepth 3 \
+            find \
+              openwrt/package/passwall-packages/sing-box \
+              -maxdepth 4 \
               -type f \
               -print \
               2>/dev/null || true
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[10] FEEDS CONFIGURATION"
             echo "============================================================"
 
             if [ -f openwrt/feeds.conf.default ]; then
               cat openwrt/feeds.conf.default
+            else
+              echo "feeds.conf.default unavailable"
             fi
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[11] ACTIVE CONFIGURATION"
             echo "============================================================"
@@ -728,6 +762,7 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[12] SING-BOX BUILD EXIT CODE"
             echo "============================================================"
@@ -740,6 +775,7 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[13] ERROR SUMMARY"
             echo "============================================================"
@@ -758,6 +794,7 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[14] LAST 300 BUILD LOG LINES"
             echo "============================================================"
@@ -770,12 +807,13 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
-            echo "[15] BUILD DIRECTORY STATUS"
+            echo "[15] SING-BOX BUILD DIRECTORY"
             echo "============================================================"
 
             find openwrt/build_dir \
-              -maxdepth 4 \
+              -maxdepth 5 \
               -type d \
               -iname '*sing-box*' \
               -print \
@@ -783,6 +821,7 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "[16] PACKAGE ARTIFACTS"
             echo "============================================================"
@@ -799,6 +838,7 @@ jobs:
 
             echo
 
+            # ----------------------------------------------------------
             echo "============================================================"
             echo "END OF DIAGNOSTIC REPORT"
             echo "============================================================"
@@ -814,7 +854,9 @@ jobs:
           ls -lh "${REPORT}"
 
       # ================================================================
-      # 22. Save useful diagnostic files
+      # 22. Collect additional diagnostic files
+      #
+      # ALWAYS runs.
       # ================================================================
       - name: Collect Diagnostic Files
         if: always()
@@ -827,47 +869,72 @@ jobs:
           echo "📦 Collecting diagnostic files"
           echo "================================================"
 
+          # ------------------------------------------------------------
           # Golang Makefile
-          if [ -f openwrt/feeds/packages/lang/golang/Makefile ]; then
+          # ------------------------------------------------------------
+          if [ -f \
+            openwrt/feeds/packages/lang/golang/Makefile
+          ]; then
+
             cp \
               openwrt/feeds/packages/lang/golang/Makefile \
               diagnostics/golang-Makefile
+
           fi
 
-          find openwrt/feeds/packages/lang/golang \
-            -type f \
-            -name Makefile \
-            -exec cp --parents {} diagnostics/ \; \
-            2>/dev/null || true
-
+          # ------------------------------------------------------------
           # sing-box Makefile
-          if [ -f openwrt/package/passwall-packages/sing-box/Makefile ]; then
+          # ------------------------------------------------------------
+          if [ -f \
+            openwrt/package/passwall-packages/sing-box/Makefile
+          ]; then
+
             cp \
               openwrt/package/passwall-packages/sing-box/Makefile \
               diagnostics/sing-box-Makefile
+
           fi
 
+          # ------------------------------------------------------------
           # Build configuration
+          # ------------------------------------------------------------
           if [ -f openwrt/.config ]; then
-            cp openwrt/.config diagnostics/openwrt.config
+            cp \
+              openwrt/.config \
+              diagnostics/openwrt.config
           fi
 
           if [ -f openwrt/feeds.conf.default ]; then
-            cp openwrt/feeds.conf.default diagnostics/feeds.conf.default
+            cp \
+              openwrt/feeds.conf.default \
+              diagnostics/feeds.conf.default
           fi
 
-          # Versions
+          # ------------------------------------------------------------
+          # Revision summary
+          # ------------------------------------------------------------
           {
             echo "ImmortalWrt:"
             git -C openwrt rev-parse HEAD 2>/dev/null || true
 
             echo
+            echo "OpenWrt/packages Golang:"
+            cat /tmp/openwrt-packages-revision.txt 2>/dev/null || true
+
+            echo
             echo "PassWall packages:"
-            git -C openwrt/package/passwall-packages rev-parse HEAD 2>/dev/null || true
+            git -C \
+              openwrt/package/passwall-packages \
+              rev-parse HEAD \
+              2>/dev/null || true
 
             echo
             echo "PassWall LuCI:"
-            git -C openwrt/package/passwall-luci rev-parse HEAD 2>/dev/null || true
+            git -C \
+              openwrt/package/passwall-luci \
+              rev-parse HEAD \
+              2>/dev/null || true
+
           } > diagnostics/revisions.txt
 
           echo
@@ -880,7 +947,7 @@ jobs:
             2>/dev/null || true
 
       # ================================================================
-      # 23. Upload diagnostics
+      # 23. Upload diagnostics as GitHub Actions Artifact
       # ================================================================
       - name: Upload sing-box Diagnostic Artifact
         if: always()
@@ -892,7 +959,7 @@ jobs:
           retention-days: 7
 
       # ================================================================
-      # 24. Final result
+      # 24. Final successful result
       # ================================================================
       - name: Final Verification
         if: success()
