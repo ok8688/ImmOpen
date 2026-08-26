@@ -295,9 +295,6 @@ jobs:
             -j"$(nproc)" \
             V=s
 
-      # ================================================================
-      # 15. Verify Generated Go Toolchain
-      # ================================================================
       - name: Verify Go Toolchain
         run: |
           set -euo pipefail
@@ -309,17 +306,41 @@ jobs:
           echo "🔍 Verifying Generated Go Toolchain"
           echo "================================================"
 
-          find staging_dir -type f -name go 2>/dev/null | head -20 || true
+          echo
+          echo "===== Go Binaries Found ====="
+
+          find staging_dir \
+            -type f \
+            -path '*/bin/go' \
+            -print
 
           echo
-          echo "===== Go Binary ====="
+          echo "===== Detecting Active Go Toolchain ====="
 
-          if [ -x staging_dir/host/bin/go ]; then
-            staging_dir/host/bin/go version
-          else
-            echo "❌ staging_dir/host/bin/go not found"
+          GO_BIN="$(find staging_dir/hostpkg/lib \
+            -type f \
+            -path '*/bin/go' \
+            ! -path '*/go-bootstrap/*' \
+            | sort -V \
+            | tail -n 1)"
+
+          if [ -z "${GO_BIN}" ]; then
+            echo "❌ No compiled Go toolchain found"
             exit 1
           fi
+
+          echo "✅ Go binary:"
+          echo "${GO_BIN}"
+
+          echo
+          echo "===== Go Version ====="
+
+          "${GO_BIN}" version
+
+          echo
+          echo "===== Go Environment ====="
+
+          "${GO_BIN}" env GOVERSION GOOS GOARCH
 
       # ================================================================
       # 16. Download sing-box
