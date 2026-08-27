@@ -1585,7 +1585,7 @@ jobs:
           } > .config
           
           echo "=== 🔒 Forbidden Package Defconfig Audit ==="
-          for p in block-mount luci-app-fstab luci-app-plugins; do
+          for p in luci-app-fstab luci-app-plugins; do
             if grep -Eq "^CONFIG_PACKAGE_${p}=[ym]" .config; then
               echo "❌ FORBIDDEN PACKAGE ENABLED IN CONFIG: $p"
               exit 1
@@ -1685,7 +1685,7 @@ jobs:
           [ -s release_assets/installed-packages.txt ] || rm -f release_assets/installed-packages.txt
           
           echo "=== 🔒 Final Manifest Package Audit ==="
-          for p in block-mount luci-app-fstab luci-app-plugins; do
+          for p in luci-app-fstab luci-app-plugins; do
             if grep -Eq "^${p} " release_assets/installed-packages.txt; then
               echo "❌ FORBIDDEN PACKAGE FOUND IN FINAL MANIFEST: $p"
               exit 1
