@@ -7,11 +7,10 @@
 # 1. 繼承 Snapshot 的企業級 retry 除錯、串流日誌與全套考古 Artifacts。
 # 2. 升級 SOURCE_DATE_EPOCH 溯源與 find 精準提取 openwrt_release。
 # 3. 保留 LTS 專屬的沙皇空間清理、絕對決定性的 4G Swap 與自癒 Hash 架構。
-# 4. [v8.0.3] 升級 ib v1.8 備份引擎，修復 tar 目錄項誤判，整合 wg-quick 支援、qrencode。
-# 5. [SDC v1.4 Final] 導入 OpenWrt Native dumpinfo 解析；強制清除同名舊 dl 壓縮包消滅 Stale Cache；精準相容 ERE 賦值；導入可觀測性日誌。
-# 6. [顯式宣告] 明確加入 CONFIG_USE_APK=y，並透過 Defconfig 與 Manifest 雙重審計嚴格排除 fstab、plugins 與 block-mount。
-# 7. [Cache Schema Versioning] 導入 sdc14 Namespace，綁定 `feeds.snapshot.txt` 雜湊，阻斷跨快照污染。
-# 8. [SING-BOX & RUST BYPASS] 暫不構建內置 sing-box 與 chinadns-ng，完全避開 Golang 斷層與 Rust [host] 工具鏈，交由 PassWall UI 線上組件更新。
+# 4. [v8.0.3] 升級 ib v1.8 備份引擎，修復 tar 目錄項誤判，整合 wg-quick 支援。
+# 5. [SDC v1.4 Final] 導入 ERE 賦值相容，優先使用 Native dumpinfo 解析。
+# 6. [SING-BOX & RUST PHYSICAL BYPASS] 物理切除 sing-box 與 chinadns-ng，完全切斷 Rust [host] 工具鏈編譯鏈條以杜絕 CI 崩潰，交由 PassWall UI 更新。
+# 7. [雙重防線審計] 導入 Defconfig Audit 與 Final Manifest Audit 雙重自動攔截網。
 # =====================================================================
 
 name: Build ImmWrt v8.0.3-LTS
@@ -79,7 +78,7 @@ jobs:
       - name: Init SRE Environment & Space Cleanup
         run: |
           set -euo pipefail
-          echo "=== 💥 啟動沙皇級核爆清理 (釋放終極極限空間) ==="
+          echo "=== 💥 啟境沙皇級核爆清理 (釋放終極極限空間) ==="
           sudo rm -rf \
             /usr/share/dotnet \
             /usr/local/lib/android \
@@ -102,8 +101,7 @@ jobs:
           sudo apt-get clean
           
           echo "=== 🚀 部署依賴與內存裝甲 ==="
-          sudo apt-get update -qq
-          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget jq golang-go ccache
+          sudo apt-get update -qq && sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget jq golang-go ccache
             
           echo "▶️ [Step] Deploying 4G Swap Armor (Deterministic)..."
           sudo swapoff -a || true
@@ -134,20 +132,28 @@ jobs:
           echo "▶️ [Step] Updating base feeds..."
           retry timeout 35m ./scripts/feeds update -a
           
-          # ✅ 終極物理防護 - 徹底切斷舊版與 Rust 依賴 (chinadns-ng)，並嚴格拔除不要的插件
+          echo "▶️ [Step] Removing upstream conflicting packages..."
           ./scripts/feeds uninstall luci-app-passwall xray-core sing-box chinadns-ng luci-app-fstab luci-app-plugins || true
           rm -rf feeds/luci/applications/luci-app-passwall feeds/packages/net/xray-core feeds/packages/net/sing-box feeds/packages/net/chinadns-ng feeds/luci/applications/luci-app-fstab feeds/luci/applications/luci-app-plugins
-          rm -rf package/feeds/luci/luci-app-passwall package/feeds/packages/xray-core package/feeds/packages/sing-box package/feeds/packages/chinadns-ng package/feeds/luci/luci-app-fstab package/feeds/luci/luci-app-plugins
           
           echo "▶️ [Step] Cloning Passwall ecosystem (Latest Upstream)..."
           retry git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/openwrt-passwall-packages
           retry git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall.git package/openwrt-passwall
           
-          # 🚀 關鍵切除：刪除 passwall-packages 內部的 chinadns-ng，阻斷 Rust [host] 工具鏈編譯
-          rm -rf package/openwrt-passwall-packages/chinadns-ng
-            
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
+
+          echo "🚀 [Step] 終極二次掃蕩：全面物理抹除 sing-box 與 chinadns-ng，徹底切斷 make defconfig 自動拉回與 Rust 崩潰源..."
+          rm -rf package/openwrt-passwall-packages/sing-box \
+                 package/openwrt-passwall-packages/chinadns-ng \
+                 package/feeds/*/sing-box \
+                 package/feeds/*/chinadns-ng \
+                 package/feeds/*/luci-app-fstab \
+                 package/feeds/*/luci-app-plugins \
+                 feeds/packages/net/sing-box \
+                 feeds/packages/net/chinadns-ng \
+                 feeds/luci/applications/luci-app-fstab \
+                 feeds/luci/applications/luci-app-plugins
 
           # =====================================================
           # 🔒 Stable Drift Control v1.4 (Anti-Stale & Adaptive)
@@ -173,7 +179,6 @@ jobs:
               printf '\nPKG_HASH:=skip\n' >> "$makefile"
             fi
 
-            # PKG_MIRROR_HASH 保持原樣或僅清除，不自動盲目賦值
             if grep -Eq '^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
               sed -i -E 's/^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=).*/PKG_MIRROR_HASH:=skip/' "$makefile"
             fi
@@ -1512,6 +1517,8 @@ jobs:
             echo "CONFIG_PACKAGE_luci-app-passwall=y"
             echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y"
             echo "CONFIG_PACKAGE_xray-core=y"
+            echo "# CONFIG_PACKAGE_sing-box is not set"
+            echo "# CONFIG_PACKAGE_chinadns-ng is not set"
             echo "CONFIG_PACKAGE_geoview=y"
             echo "CONFIG_PACKAGE_ca-bundle=y"
             echo "CONFIG_PACKAGE_ca-certificates=y"
@@ -1558,7 +1565,7 @@ jobs:
           } > .config
           
           echo "=== 🔒 Forbidden Package Defconfig Audit ==="
-          for p in block-mount luci-app-fstab luci-app-plugins; do
+          for p in sing-box chinadns-ng block-mount luci-app-fstab luci-app-plugins; do
             if grep -Eq "^CONFIG_PACKAGE_${p}=[ym]" .config; then
               echo "❌ FORBIDDEN PACKAGE ENABLED IN CONFIG: $p"
               exit 1
@@ -1643,7 +1650,7 @@ jobs:
           [ -s release_assets/installed-packages.txt ] || rm -f release_assets/installed-packages.txt
           
           echo "=== 🔒 Final Manifest Package Audit ==="
-          for p in block-mount luci-app-fstab luci-app-plugins; do
+          for p in sing-box chinadns-ng block-mount luci-app-fstab luci-app-plugins; do
             if grep -Eq "^${p} " release_assets/installed-packages.txt; then
               echo "❌ FORBIDDEN PACKAGE FOUND IN FINAL MANIFEST: $p"
               exit 1
@@ -1699,16 +1706,13 @@ jobs:
           tag_name: v8.0.3-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
           name: ImmWrt v8.0.3-LTS (TSAR BOMBA SEALED)
           body: |
-            ### 🔒 v8.0.3-LTS TSAR BOMBA SEALED (SDC v1.4 Final + Explicit APK)
+            ### 🔒 v8.0.3-LTS TSAR BOMBA SEALED (SDC v1.4 Final)
             - **顯式宣告 APK**：在設定檔中明確宣告 `CONFIG_USE_APK=y`，鎖定底層套件管理架構。
-            - **雙重防線審計 (Final Audit)**：在 Defconfig 與最終固件 Manifest 階段全面導入強制檢查，杜絕 `block-mount`、`luci-app-fstab` 與 `luci-app-plugins` 任何形式的依賴回歸。
-            - **PassWall 最新主幹同步**：即時拉取最新 `openwrt-passwall` 與 `openwrt-passwall-packages` 最新 commit。
-            - **Sing-Box 與 ChinaDNS-NG 動態託管策略**：取消固化編譯內置 sing-box 與 chinadns-ng，完全避開 Golang 與 Rust 工具鏈衝突，刷機後可於 PassWall「組件更新」頁面一鍵動態載入。
             - **備份引擎升級**：內建 `ib v1.8` 黃金基準垂直排版版，解耦套件強依賴，確保跨版本配置恢復安全。
-            - **網路核心擴展**：完整嵌入 `WireGuard` 核心套件、密碼學底層模組、`wg-quick` 工具鏈及 `qrencode` (QR Code 支援)。
-            - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 解析；強制清除同名舊 dl 壓縮包消滅 Stale Cache；精準相容 ERE `(:=|\?=|=)` 賦值；導入 SDC 獨立下載狀態的可觀測性日誌 (`tail -n 80`)；保留 `PKG_MIRROR_HASH` 原始語義。
-            - **極致溯源與環境決定性**：將 `openwrt_release` 的提取範圍絕對限縮至 `target-x86_64_musl` 杜絕多目標殘留干擾；升級 4G Swap 建立流程 (`rm -f` 防護) 免疫 Runner Drift。
-            - **快取綱要嚴格隔離**：`sdc14` Namespace 搭配 `feeds.snapshot.txt` 雜湊前綴鎖定 `restore-keys`，達成快照級精準命中與物理隔離。
+            - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 解析，精準相容 ERE `(:=|\?=|=)` 賦值。
+            - **極致溯源與環境決定性**：將 `openwrt_release` 提取範圍限縮至 `target-x86_64_musl` 杜絕多目標殘留，確保 4G Swap 成功建立。
+            - **Sing-Box & Rust 實體切除 (終極手段)**：在 feeds install 之後進行二次通掃實體物理抹除 `sing-box` 與 `chinadns-ng`。徹底切斷 `make defconfig` 依賴拉回，並從根源消滅 `rust [host]` 工具鏈觸發的 OOM CI 崩潰。刷機後可於 PassWall UI 動態更新。
+            - **雙重審計防禦**：加入 Defconfig Audit 與 Final Manifest Audit 雙重自動攔截網，只要編譯通過即保證 100% 純淨韌體。
           files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
