@@ -69,7 +69,7 @@ jobs:
                 if [[ $n -lt $max ]]; then
                   echo "⚠️ [FAIL] Attempt $n: $cmd_name" >> /tmp/retry_history.log
                   echo "⚠️ Failed! Retrying in $delay seconds..."
-                  ((n++)); delay=$((delay * 2 + RANDOM % 3)); sleep $delay
+                  n=$((n + 1)); delay=$((delay * 2 + RANDOM % 3)); sleep "$delay"
                 else
                   echo "❌ FATAL: Failed after $max retries: $cmd_name"
                   cat /tmp/retry_history.log
