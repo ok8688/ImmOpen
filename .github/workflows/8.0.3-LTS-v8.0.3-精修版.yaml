@@ -278,7 +278,7 @@ jobs:
           # =====================================================
           echo "▶️ [Step] Eradicating block-mount from default packages and dependencies..."
           # 1. 拔除 target DEFAULT_PACKAGES 裡的 block-mount
-          find target/linux include -type f -name "Makefile" -o -name "target.mk" | xargs sed -i 's/block-mount//g' || true
+          find target/linux include -type f \( -name "Makefile" -o -name "target.mk" \) -print0 | xargs -0 sed -i 's/block-mount//g' || true
           
           # 2. 拔除所有的 +block-mount 依賴 (防止 luci 模組被強制取消或強拉)
           find feeds package -type f -name "Makefile" | xargs sed -i 's/+block-mount//g' || true
