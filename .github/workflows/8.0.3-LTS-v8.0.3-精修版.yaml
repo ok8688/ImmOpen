@@ -158,7 +158,7 @@ jobs:
           # =====================================================
           echo "▶️ [Step] Transplanting Rust package from master branch..."
           rm -rf feeds/packages/lang/rust
-          git clone --depth=1 --single-branch --branch master https://github.com/immortalwrt/packages.git /tmp/packages-master
+          retry bash -c 'rm -rf /tmp/packages-master && timeout 20m git clone --depth=1 --single-branch --branch master https://github.com/immortalwrt/packages.git /tmp/packages-master'
           cp -r /tmp/packages-master/lang/rust feeds/packages/lang/rust
           rm -rf /tmp/packages-master
           echo "✅ Master Rust successfully transplanted! (嘗試使用 Rust CI 預建 LLVM artifact，而不是本地重編)"
