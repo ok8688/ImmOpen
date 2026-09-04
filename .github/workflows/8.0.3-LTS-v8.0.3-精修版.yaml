@@ -1770,7 +1770,7 @@ jobs:
             - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 解析；強制清除同名舊 dl 壓縮包消滅 Stale Cache；精準相容 ERE `(:=|\?=|=)` 賦值；導入 SDC 獨立下載狀態的可觀測性日誌 (`tail -n 80`)；保留 `PKG_MIRROR_HASH` 原始語義。
             - **極致溯源與環境決定性**：將 `openwrt_release` 的提取範圍絕對限縮至 `target-x86_64_musl` 杜絕多目標殘留干擾；升級 4G Swap 建立流程 (`rm -f` 防護) 免疫 Runner Drift。
             - **快取綱要嚴格隔離**：`sdc14` Namespace 搭配 `feeds.snapshot.txt` 雜湊前綴鎖定 `restore-keys`，達成快照級精準命中與物理隔離。
-            - **Rust LLVM 404 修復 (Master Transplant)**：將老舊 Rust Feed 替換為主幹最新版本，強制恢復 `download-ci-llvm=true` 下載 CI 預建二進位包，徹底拒絕本地重編 LLVM。
+            - **Rust LLVM 404 修復 (Master Transplant)**：將老舊 Rust Feed 替換為主幹最新版本，嘗試透過 `download-ci-llvm=true` 抓取 CI 預建二進位包，避免耗時的本地 LLVM 重編。
             - **源碼級物理拔除**：針對 `block-mount` 強行注入至 Manifest 的問題，進行源碼層級的物理抹除手術，拔除其 `DEFAULT_PACKAGES` 與所有模組的強制依賴。
           files: release_assets/*
         env:
