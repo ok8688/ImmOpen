@@ -16,6 +16,7 @@
 # 10. [Rust Precision Fix] 保留 LTS 原生 Rust feed，僅關閉 CI LLVM Artifact 下載，避免 404。
 # 11. [Post-Defconfig Audit & Strict Validation] 於 make defconfig 解析後執行配置審計；強制 Manifest 必須存在；強制 SHA256 嚴格校驗；全域徹底摧毀 block-mount 隱式依賴。
 # 12. [Node 24 Ready] 全面升級 Actions 依賴至 v5/v3 系列，確保在 GitHub 移除 Node 20 限制後的永續運作。
+# 13. [Golang 26.x & Sing-Box Fix] 採用 PassWall 官方規範之 packages_lang_golang 26.x 工具鏈；拔除 SDC 針對 sing-box 的 Makefile 破壞性覆寫；移除全域 CC/CXX 避免 CGO 交叉編譯污染。
 # =====================================================================
 
 name: Build ImmWrt v9.0.0-LTS-no-xray-node24
@@ -143,6 +144,11 @@ jobs:
           echo "▶️ [Step] Updating base feeds..."
           retry timeout 35m ./scripts/feeds update -a
           
+          # ✅ 依照 PassWall 官方規範：升級為 Golang 26.x 工具鏈 (解決 sing-box 最新核心編譯依賴)
+          echo "▶️ [Step] Upgrading Golang to 26.x (PassWall upstream spec)..."
+          rm -rf feeds/packages/lang/golang
+          retry git clone --depth=1 https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
+
           # ✅ 終極物理防護 - 徹底切斷舊版供應鏈，並嚴格拔除不要的插件
           ./scripts/feeds uninstall luci-app-passwall xray-core sing-box luci-app-fstab luci-app-plugins || true
           rm -rf feeds/luci/applications/luci-app-passwall feeds/packages/net/xray-core feeds/packages/net/sing-box feeds/luci/applications/luci-app-fstab feeds/luci/applications/luci-app-plugins
@@ -162,6 +168,7 @@ jobs:
             
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
+          ./scripts/feeds install -f golang
 
       - name: Generate SBOM Snapshot
         run: |
@@ -354,7 +361,8 @@ jobs:
             fi
           }
 
-          sync_hash "sing-box" "package/openwrt-passwall-packages/sing-box/Makefile"
+          # 🚫 sing-box 停用 SDC 雜湊覆寫：PassWall packages 為構建時即時拉取最新 Upstream，避免 dumpinfo 名稱不匹配導致 Makefile 結構被破壞
+          # sync_hash "sing-box" "package/openwrt-passwall-packages/sing-box/Makefile"
           
           set -e
           echo "🔒 [SDC v1.4] Adaptive mode completed"
@@ -1705,10 +1713,6 @@ jobs:
           echo "▶️ [Step] Downloading package dependencies (this may take a while)..."
           retry bash -c 'timeout 30m make download -j$(nproc) V=s'
           
-          # === 加入 ccache 編譯環境變數 ===
-          export CC="ccache gcc"
-          export CXX="ccache g++"
-          
           FAST_BUILD_STATUS="SUCCESS"
           echo "▶️ [Step] Starting main compilation..."
           if ! make -j$(nproc) 2>&1 | tee >(gzip -1 -c > ../logs_build.log.gz); then
@@ -1820,16 +1824,17 @@ jobs:
           tag_name: v9.0.0-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
           name: ImmWrt v9.0.0-LTS (TSAR BOMBA SEALED)
           body: |
-            ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (SDC v1.4 Final + Explicit APK)
+            ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (SDC v1.4 Final + Explicit APK + Golang 26.x)
             - **顯式宣告 APK**：在設定檔中明確宣告 `CONFIG_USE_APK=y`，鎖定底層套件管理架構。
             - **四重防線審計 (Final Audit)**：透過物理刪除、標準 Kconfig Feature 禁用、套件定義禁用，以及最終固件 Manifest 階段全面導入強制檢查，從本次編譯 payload 中徹底拔除 `xray-core` 與 `xray-plugin` (保留 PassWall 運行時動態下載能力)。並嚴格杜絕 `block-mount`、`luci-app-fstab` 與 `luci-app-plugins` 等依賴回歸。
+            - **Golang 26.x 工具鏈升級**：遵循 PassWall 官方規範，全面引入 `sbwml/packages_lang_golang` 26.x 分支，徹底解決最新 sing-box 核心依賴之編譯阻斷。
             - **嚴格驗證機制**：Post-Defconfig 深度配置審計；最終韌體 Manifest 缺失致命化；SHA256 校驗強制完全比對，拒絕寬容通過。
             - **PassWall 最新主幹同步**：即時拉取最新 `openwrt-passwall` 與 `openwrt-passwall-packages` 最新 commit。
             - **備份引擎升級**：內建 `ib v1.8` 黃金基準垂直排版版，解耦套件強依賴，確保跨版本配置恢復安全。
             - **網路核心擴展**：完整嵌入 `WireGuard` 核心套件、密碼學底層模組、`wg-quick` 工具鏈及 `qrencode` (QR Code 支援)。
-            - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 精準路徑解析；精準相容 ERE `(:=|\?=|=)` 賦值；導入 `ORIG_HASH` 完整狀態回滾與寫入後雙重驗證機制。
+            - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 精準路徑解析；精準相容 ERE `(:=|\?=|=)` 賦值；導入 `ORIG_HASH` 完整狀態回滾與寫入後雙重驗證機制（針對 sing-box 取消侵入式覆寫以保障 Makefile 完整性）。
             - **嚴格退回機制 (Strict No-Guess Fallback)**：SDC 嚴格要求 `DOWNLOAD_OK` 旗標與唯一精準匹配，若無法精準定位則完美還原狀態，消滅萬用字元猜測式依賴污染，維持決定性 (Determinism)。
-            - **極致溯源與環境決定性**：將 `openwrt_release` 的提取範圍絕對限縮至 `target-x86_64_musl` 杜絕多目標殘留干擾；升級 4G Swap 建立流程 (`rm -f` 防護) 免疫 Runner Drift。
+            - **極致溯源與環境決定性**：將 `openwrt_release` 的提取範圍絕對限縮至 `target-x86_64_musl` 杜絕多目標殘留干擾；升級 4G Swap 建立流程 (`rm -f` 防護) 免疫 Runner Drift；清除全域 CC/CXX 導出避免 CGO 交叉編譯污染。
             - **快取綱要嚴格隔離**：`sdc14` Namespace 搭配 `feeds.snapshot.txt` 雜湊前綴鎖定 `restore-keys`，綁定 Run ID 達成真正的 Cumulative Generation，並允許同 namespace 內向下相容 fallback reuse。重構 Restore 順序確保 SDC 不被舊 Cache 覆蓋。
             - **Rust LLVM 404 修復**：保留 LTS 原生 Rust feed，僅關閉 `download-ci-llvm`，改由 Runner 本地建構 LLVM，避免上游 CI Artifact 清理造成 404。
             - **Node 24 Ready**：全面升級 Actions 依賴至 v5/v3 系列，確保在 GitHub 移除 Node 20 限制後的永續運作。
