@@ -10,11 +10,11 @@
 # 4. [v9.0.0] 升級 ib v1.8 備份引擎，修復 tar 目錄項誤判，整合 wg-quick 支援、qrencode。
 # 5. [SDC v1.4 Final] 導入 OpenWrt Native dumpinfo 精準路徑解析；精準相容 ERE 賦值；導入 ORIG_HASH 完整狀態回滾與寫入後雙重驗證機制。
 # 6. [Strict No-Guess Fallback] SDC 嚴格要求 DOWNLOAD_OK 旗標與唯一精準匹配，若無法精準定位則完美還原狀態，消滅猜測式污染。
-# 7. [顯式宣告與四重封鎖] 明確宣告 CONFIG_USE_APK=y；並透過三重 Kconfig 禁用 + 最終審計 + 物理刪除，從編譯 payload 中徹底拔除 Xray (含 Plugin)。
+# 7. [顯式宣告與四重封鎖] 明確宣告 CONFIG_USE_APK=y；並透過標準 Kconfig 禁用 + 最終審計 + 物理刪除，從編譯 payload 中徹底拔除 Xray (含 Plugin) 及干擾依賴。
 # 8. [Cache Schema Versioning] 導入 sdc14 Namespace，排除時間戳記，綁定 Run ID 達成真正的 Cumulative Generation，並允許精準 fallback reuse。
 # 9. [CCACHE 加速] 導入專屬 ccache-tls- 快取，搭配無損累積式 Generation 與並行 Retry 機制大幅降低時間成本。
 # 10. [Rust Precision Fix] 保留 LTS 原生 Rust feed，僅關閉 CI LLVM Artifact 下載，避免 404。
-# 11. [Post-Defconfig Audit & Strict Validation] 於 make defconfig 解析後執行配置審計；強制 Manifest 必須存在；強制 SHA256 嚴格校驗。
+# 11. [Post-Defconfig Audit & Strict Validation] 於 make defconfig 解析後執行配置審計；強制 Manifest 必須存在；強制 SHA256 嚴格校驗；徹底杜絕 x86 預設掛載覆寫。
 # 12. [Node 24 Ready] 全面升級 Actions 依賴至 v5/v3 系列，確保在 GitHub 移除 Node 20 限制後的永續運作。
 # =====================================================================
 
@@ -152,10 +152,12 @@ jobs:
           retry git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/openwrt-passwall-packages
           retry git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall.git package/openwrt-passwall
           
-          # ✅ 四重封鎖之第一層：物理移除 PassWall Packages 中的 Xray 原始碼 (含 Plugin)
-          echo "▶️ [Step] Physical removal of Xray from Passwall packages..."
+          # ✅ 四重封鎖之第一層：物理移除 PassWall Packages 中的 Xray 原始碼 (含 Plugin) 及干擾項
+          echo "▶️ [Step] Physical removal of Xray and unwanted dependencies..."
           rm -rf package/openwrt-passwall-packages/xray-core
           rm -rf package/openwrt-passwall-packages/xray-plugin
+          rm -rf package/feeds/packages/bsbf-resources
+          rm -rf package/feeds/packages/v2raya
             
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
@@ -1579,6 +1581,10 @@ jobs:
         run: |
           set -euo pipefail
           cd openwrt
+          
+          # 先清理掉可能殘留的預設安裝套件，避免被自動選回
+          sed -i 's/block-mount//g' target/linux/x86/Makefile || true
+          
           {
             echo "CONFIG_TARGET_x86=y"
             echo "CONFIG_TARGET_x86_64=y"
@@ -1588,10 +1594,10 @@ jobs:
             echo "CONFIG_USE_APK=y"
             echo "CONFIG_PACKAGE_luci-app-passwall=y"
             echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y"
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=n"
-            echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin=n"
-            echo "CONFIG_PACKAGE_xray-core=n"
-            echo "CONFIG_PACKAGE_xray-plugin=n"
+            echo "# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray is not set"
+            echo "# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Plugin is not set"
+            echo "# CONFIG_PACKAGE_xray-core is not set"
+            echo "# CONFIG_PACKAGE_xray-plugin is not set"
             echo "CONFIG_PACKAGE_sing-box=y"
             echo "CONFIG_PACKAGE_geoview=y"
             echo "CONFIG_PACKAGE_ca-bundle=y"
@@ -1632,9 +1638,9 @@ jobs:
             echo "CONFIG_PACKAGE_kmod-virtio-net=y"
             echo "CONFIG_PACKAGE_kmod-virtio-blk=y"
             echo "CONFIG_PACKAGE_kmod-nft-offload=y"
-            echo "CONFIG_PACKAGE_block-mount=n"
-            echo "CONFIG_PACKAGE_luci-app-fstab=n"
-            echo "CONFIG_PACKAGE_luci-app-plugins=n"
+            echo "# CONFIG_PACKAGE_block-mount is not set"
+            echo "# CONFIG_PACKAGE_luci-app-fstab is not set"
+            echo "# CONFIG_PACKAGE_luci-app-plugins is not set"
             echo "CONFIG_CCACHE=y"
           } > .config
           
@@ -1813,7 +1819,7 @@ jobs:
           body: |
             ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (SDC v1.4 Final + Explicit APK)
             - **顯式宣告 APK**：在設定檔中明確宣告 `CONFIG_USE_APK=y`，鎖定底層套件管理架構。
-            - **四重防線審計 (Final Audit)**：透過物理刪除、Kconfig Feature 禁用、套件定義禁用，以及最終固件 Manifest 階段全面導入強制檢查，從本次編譯與固件包中徹底拔除 `xray-core` 與 `xray-plugin` (不含 PassWall 運行時動態下載能力)。並嚴格杜絕 `block-mount`、`luci-app-fstab` 與 `luci-app-plugins` 等依賴回歸。
+            - **四重防線審計 (Final Audit)**：透過物理刪除、標準 Kconfig Feature 禁用、套件定義禁用，以及最終固件 Manifest 階段全面導入強制檢查，從本次編譯 payload 中徹底拔除 `xray-core` 與 `xray-plugin` (保留 PassWall 運行時動態下載能力)。並嚴格杜絕 `block-mount`、`luci-app-fstab` 與 `luci-app-plugins` 等依賴回歸。
             - **嚴格驗證機制**：Post-Defconfig 深度配置審計；最終韌體 Manifest 缺失致命化；SHA256 校驗強制完全比對，拒絕寬容通過。
             - **PassWall 最新主幹同步**：即時拉取最新 `openwrt-passwall` 與 `openwrt-passwall-packages` 最新 commit。
             - **備份引擎升級**：內建 `ib v1.8` 黃金基準垂直排版版，解耦套件強依賴，確保跨版本配置恢復安全。
