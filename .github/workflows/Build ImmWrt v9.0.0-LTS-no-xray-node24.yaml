@@ -14,7 +14,7 @@
 # 8. [Cache Schema Versioning] 導入 sdc14 Namespace，排除時間戳記，綁定 Run ID 達成真正的 Cumulative Generation，並允許精準 fallback reuse。
 # 9. [CCACHE 加速] 導入專屬 ccache-tls- 快取，搭配無損累積式 Generation 與並行 Retry 機制大幅降低時間成本。
 # 10. [Rust Precision Fix] 保留 LTS 原生 Rust feed，僅關閉 CI LLVM Artifact 下載，避免 404。
-# 11. [Post-Defconfig Audit & Strict Validation] 於 make defconfig 解析後執行配置審計；強制 Manifest 必須存在；強制 SHA256 嚴格校驗；徹底杜絕 x86 預設掛載覆寫。
+# 11. [Post-Defconfig Audit & Strict Validation] 於 make defconfig 解析後執行配置審計；強制 Manifest 必須存在；強制 SHA256 嚴格校驗；全域徹底摧毀 block-mount 隱式依賴。
 # 12. [Node 24 Ready] 全面升級 Actions 依賴至 v5/v3 系列，確保在 GitHub 移除 Node 20 限制後的永續運作。
 # =====================================================================
 
@@ -156,8 +156,8 @@ jobs:
           echo "▶️ [Step] Physical removal of Xray and unwanted dependencies..."
           rm -rf package/openwrt-passwall-packages/xray-core
           rm -rf package/openwrt-passwall-packages/xray-plugin
-          rm -rf package/feeds/packages/bsbf-resources
-          rm -rf package/feeds/packages/v2raya
+          rm -rf package/feeds/packages/bsbf-resources feeds/packages/net/bsbf-resources
+          rm -rf package/feeds/packages/v2raya feeds/packages/net/v2raya
             
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
@@ -1582,8 +1582,9 @@ jobs:
           set -euo pipefail
           cd openwrt
           
-          # 先清理掉可能殘留的預設安裝套件，避免被自動選回
-          sed -i 's/block-mount//g' target/linux/x86/Makefile || true
+          # 全域抹除 block-mount 的所有強制依賴與選取
+          echo "=== 💥 Eradicating block-mount dependencies globally ==="
+          find package feeds target -type f \( -name "Makefile" -o -name "*.mk" -o -name "Config.in" \) -exec sed -i -E 's/\+block-mount\b//g; s/select PACKAGE_block-mount\b//g; s/\bblock-mount\b//g' {} + || true
           
           {
             echo "CONFIG_TARGET_x86=y"
