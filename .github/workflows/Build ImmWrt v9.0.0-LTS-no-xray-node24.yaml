@@ -1583,9 +1583,10 @@ jobs:
           set -euo pipefail
           cd openwrt
           
-          # 全域抹除 block-mount 的所有強制依賴與選取
+          # 全域抹除 block-mount 的所有強制依賴與選取 (保護 Makefile 原始語法)
           echo "=== 💥 Eradicating block-mount dependencies globally ==="
-          find package feeds target -type f \( -name "Makefile" -o -name "*.mk" -o -name "Config.in" \) -exec sed -i -E 's/\+block-mount\b//g; s/select PACKAGE_block-mount\b//g; s/\bblock-mount\b//g' {} + || true
+          sed -i -E 's/\bblock-mount\b//g' target/linux/x86/Makefile || true
+          find package feeds target -type f \( -name "Makefile" -o -name "*.mk" -o -name "Config.in" \) -exec sed -i -E 's/\+block-mount\b//g; s/select PACKAGE_block-mount\b//g' {} + || true
           
           {
             echo "CONFIG_TARGET_x86=y"
