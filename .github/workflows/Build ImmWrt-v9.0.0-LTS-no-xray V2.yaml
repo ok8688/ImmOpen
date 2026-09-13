@@ -163,6 +163,61 @@ jobs:
           rm -rf /tmp/packages-master
           echo "✅ Master Rust successfully transplanted!"
           # =====================================================
+          # 🔒 Surgical Default-Package Purge: LTS tweak block-mount
+          # v25.12.2 的 DEFAULT_PACKAGES.tweak 會額外注入 block-mount；
+          # 精準移除該一項，完整保留其餘 LTS tweak 套件與 Make continuation。
+          # =====================================================
+          echo "▶️ [Step] Removing LTS default block-mount injection..."
+          python3 - <<'PY_PATCH'
+          from pathlib import Path
+
+          path = Path("include/target.mk")
+          text = path.read_text()
+          start = text.find("DEFAULT_PACKAGES.tweak:=")
+          if start < 0:
+              raise SystemExit("FATAL: DEFAULT_PACKAGES.tweak not found")
+
+          end = text.find("\n\n", start)
+          if end < 0:
+              raise SystemExit("FATAL: DEFAULT_PACKAGES.tweak block boundary not found")
+
+          block = text[start:end]
+          lines = block.splitlines(keepends=True)
+          removed = False
+          kept = []
+          for line in lines:
+              if not removed and line.rstrip("\n") == "\tblock-mount \\":
+                  removed = True
+                  continue
+              kept.append(line)
+          if not removed:
+              raise SystemExit("FATAL: expected block-mount entry not found in DEFAULT_PACKAGES.tweak")
+
+          block = "".join(kept)
+          path.write_text(text[:start] + block + text[end:])
+          PY_PATCH
+
+          python3 - <<'PY_VERIFY'
+          from pathlib import Path
+
+          text = Path("include/target.mk").read_text()
+          start = text.find("DEFAULT_PACKAGES.tweak:=")
+          end = text.find("\n\n", start)
+          if start < 0 or end < 0:
+              raise SystemExit("FATAL: unable to locate DEFAULT_PACKAGES.tweak for verification")
+
+          block = text[start:end]
+          if any(line.rstrip("\n") == "\tblock-mount \\" for line in block.splitlines(keepends=True)):
+              raise SystemExit("FATAL: block-mount still present in DEFAULT_PACKAGES.tweak")
+          for required in ("autocore", "default-settings-chn", "kmod-nf-nathelper", "luci", "luci-app-cpufreq"):
+              if required not in block:
+                  raise SystemExit(f"FATAL: LTS tweak entry lost: {required}")
+          PY_VERIFY
+          echo "=== 🔍 LTS DEFAULT_PACKAGES.tweak ==="
+          sed -n '/^DEFAULT_PACKAGES.tweak:=/,/^$/p' include/target.mk
+          echo "✅ LTS tweak preserved; only default block-mount injection removed."
+          # =====================================================
+
           echo "▶️ [Step] Installing feeds..."
           retry bash -c 'set -o pipefail; timeout 35m ./scripts/feeds install -a -f'
 
