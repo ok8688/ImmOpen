@@ -16,7 +16,7 @@
 # 10. [Xray Decoupling] 源碼級抹除 xray-core 編譯依賴，交由 PassWall GUI 執行期動態下載二進位檔。
 # =====================================================================
 
-name: Build ImmWrt-v9.0.0-LTS-no-xray V2
+name: Build ImmWrt-v9.0.0-LTS-no-xray
 
 on:
   workflow_dispatch:
@@ -207,11 +207,11 @@ jobs:
               raise SystemExit("FATAL: unable to locate DEFAULT_PACKAGES.tweak for verification")
 
           block = text[start:end]
-          if any(line.rstrip("\n") == "\tblock-mount \\" for line in block.splitlines(keepends=True)):
-              raise SystemExit("FATAL: block-mount still present in DEFAULT_PACKAGES.tweak")
-          for required in ("autocore", "default-settings-chn", "kmod-nf-nathelper", "luci", "luci-app-cpufreq"):
-              if required not in block:
-                  raise SystemExit(f"FATAL: LTS tweak entry lost: {required}")
+          expected = "DEFAULT_PACKAGES.tweak:=\\" + "\n" + "\tdefault-settings-chn \\" + "\n" + "\tkmod-nf-nathelper \\" + "\n" + "\tluci"
+          if block != expected:
+              print("=== ACTUAL DEFAULT_PACKAGES.tweak ===")
+              print(block)
+              raise SystemExit("FATAL: DEFAULT_PACKAGES.tweak differs from expected v25.12.2 LTS post-patch block")
           PY_VERIFY
           echo "=== 🔍 LTS DEFAULT_PACKAGES.tweak ==="
           sed -n '/^DEFAULT_PACKAGES.tweak:=/,/^$/p' include/target.mk
