@@ -12,7 +12,7 @@
 # 6. [顯式宣告] 明確加入 CONFIG_USE_APK=y，並透過 Defconfig、Post-Defconfig 與 Manifest 三重審計嚴格排除 automount、fstab、plugins 與 block-mount。
 # 7. [Cache Schema Versioning] 導入 sdc14 Namespace，綁定 `feeds.snapshot.txt` 雜湊，阻斷跨快照污染。
 # 8. [CCACHE 加速] 導入專屬 ccache-tls- 快取，採 8G + CCACHE_BASEDIR，降低 LTS 重新編譯的時間成本。
-# 9. [Ubuntu 24.04 + Master Rust] 驗證通過；直接移植 ImmortalWrt packages master 的 Rust package 定義。
+# 9. [Ubuntu 26.04 + Master Rust] 驗證通過；直接移植 ImmortalWrt packages master 的 Rust package 定義。
 # 10. [Xray Decoupling] 源碼級抹除 xray-core 編譯依賴，交由 PassWall GUI 執行期動態下載二進位檔。
 # =====================================================================
 
@@ -1831,8 +1831,8 @@ jobs:
           tag_name: v9.0.0-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
           name: ImmWrt v9.0.0-LTS (TSAR BOMBA SEALED)
           body: |
-            ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (Ubuntu 24.04 + Master Rust + SDC v1.4 + Xray Decoupled)
-            - **Build Runner**：升級至 Ubuntu 24.04；移除 Ubuntu 24.04 已不可用的舊 Python 套件，改用已驗證可用的 `python3-setuptools`。
+            ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (Ubuntu 26.04 + Master Rust + SDC v1.4 + Xray Decoupled)
+            - **Build Runner**：升級至 Ubuntu 26.04；移除 Ubuntu 24.04 已不可用的舊 Python 套件，改用已驗證可用的 `python3-setuptools`。
             - **Rust Toolchain**：直接取得 ImmortalWrt `packages` master 的 `lang/rust` package 定義，僅做必要的 Rust 相容性手術植入。
             - **CCache**：保留 LTS `sdc14` Cache Namespace 與 feeds 雜湊隔離，同時採用 8G `CCACHE_MAXSIZE` 與 `CCACHE_BASEDIR`。
             - **版本升級**：基於 ImmortalWrt v25.12.2 LTS 正式分支構建。
