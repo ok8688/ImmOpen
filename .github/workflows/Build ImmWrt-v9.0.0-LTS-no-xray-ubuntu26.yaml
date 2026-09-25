@@ -16,7 +16,7 @@
 # 10. [Xray Decoupling] 源碼級抹除 xray-core 編譯依賴，交由 PassWall GUI 執行期動態下載二進位檔。
 # =====================================================================
 
-name: Build ImmWrt-v9.0.0-LTS-no-xray v2
+name: Build ImmWrt-v9.0.0-LTS-no-xray-ubuntu26
 
 on:
   workflow_dispatch:
