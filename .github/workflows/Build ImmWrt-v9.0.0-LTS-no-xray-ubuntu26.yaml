@@ -1832,7 +1832,7 @@ jobs:
           name: ImmWrt v9.0.0-LTS (TSAR BOMBA SEALED)
           body: |
             ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (Ubuntu 26.04 + Master Rust + SDC v1.4 + Xray Decoupled)
-            - **Build Runner**：升級至 Ubuntu 26.04；移除 Ubuntu 24.04 已不可用的舊 Python 套件，改用已驗證可用的 `python3-setuptools`。
+            - **Build Runner**：升級至 Ubuntu 26.04；移除 Ubuntu 26.04 已不可用的舊 Python 套件，改用已驗證可用的 `python3-setuptools`。
             - **Rust Toolchain**：直接取得 ImmortalWrt `packages` master 的 `lang/rust` package 定義，僅做必要的 Rust 相容性手術植入。
             - **CCache**：保留 LTS `sdc14` Cache Namespace 與 feeds 雜湊隔離，同時採用 8G `CCACHE_MAXSIZE` 與 `CCACHE_BASEDIR`。
             - **版本升級**：基於 ImmortalWrt v25.12.2 LTS 正式分支構建。
