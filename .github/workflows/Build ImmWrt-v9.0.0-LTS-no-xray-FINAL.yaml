@@ -1,4 +1,4 @@
-name: Build ImmWrt-v9.0.0-LTS-no-xray-refined
+name: Build ImmWrt-v9.0.0-LTS-no-xray-FINAL
 
 on:
   workflow_dispatch:
@@ -218,109 +218,6 @@ jobs:
           sed -i '/config PACKAGE_luci-app-passwall_INCLUDE_Xray/,/config / s/default y/default n/g' package/openwrt-passwall/luci-app-passwall/Makefile || true
           rm -rf package/openwrt-passwall-packages/xray-core
           echo "✅ xray-core physically eradicated from build tree."
-          # =====================================================
-
-          # =====================================================
-          # 🔒 Stable Drift Control v1.4 (Anti-Stale & Adaptive)
-          # =====================================================
-          set +e
-          
-          sync_hash () {
-            local name="$1"
-            local makefile="$2"
-            local pattern="$3"
-            
-            if [ ! -f "$makefile" ]; then
-              echo "⚠️ $name: Makefile missing, skip"
-              return
-            fi
-            
-            echo "🔒 [SDC v1.4] Adaptive source resolution: $name"
-            
-            # 1. POSIX ERE 萬用賦值 Regex 兼容修正 (:=, ?=, =) 並防止雙重定義
-            if grep -Eq '^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
-              sed -i -E 's/^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=).*/PKG_HASH:=skip/' "$makefile"
-            else
-              printf '\nPKG_HASH:=skip\n' >> "$makefile"
-            fi
-
-            # PKG_MIRROR_HASH 保持原樣或僅清除，不自動盲目賦值
-            if grep -Eq '^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
-              sed -i -E 's/^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=).*/PKG_MIRROR_HASH:=skip/' "$makefile"
-            fi
-            
-            # 2. 讓 OpenWrt build system 自己解析 package metadata
-            local pkg_source=""
-            pkg_source="$(
-              make -s "package/${name}/dumpinfo" 2>/dev/null |
-                sed -n 's/^Source: //p' |
-                head -n 1
-            )" || true
-            
-            pkg_source="$(
-              printf '%s' "$pkg_source" |
-                sed 's/\r$//' |
-                sed 's/^[[:space:]]*//' |
-                sed 's/[[:space:]]*$//'
-            )"
-            
-            if [ -n "$pkg_source" ]; then
-              pkg_source="$(basename -- "$pkg_source")"
-              echo "🧹 [SDC v1.4] Purging stale dl cache for exact source: $pkg_source"
-              rm -f "dl/$pkg_source"
-            fi
-            
-            # 3. 觸發實際下載 (強制從上游抓取乾淨 Artifact，並保留錯誤可觀測性)
-            if make "package/${name}/download" V=s >"/tmp/sdc-${name}-download.log" 2>&1; then
-              echo "✅ $name: download stage completed"
-            else
-              echo "⚠️ $name: download stage failed; continuing with Adaptive Drift"
-              tail -n 80 "/tmp/sdc-${name}-download.log" || true
-            fi
-            
-            local FILE=""
-            
-            # 4. 精準定位 OpenWrt 實際下載 Artifact
-            if [ -n "$pkg_source" ]; then
-              if [ -f "dl/$pkg_source" ]; then
-                FILE="dl/$pkg_source"
-              fi
-            fi
-            
-            # 5. Legacy / Drift Fallback
-            if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
-              FILE="$(
-                find dl -maxdepth 1 -type f \
-                  \( -name "${pattern}*.tar.gz" \
-                  -o -name "${pattern}*.tar.xz" \
-                  -o -name "${pattern}*.zip" \) \
-                  -print 2>/dev/null |
-                  sort |
-                  head -n 1
-              )"
-            fi
-            
-            # 6. SHA256 Self-Healing
-            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-              local NEW_HASH=""
-              NEW_HASH="$(sha256sum "$FILE" | awk '{print $1}')" || true
-              if [ -n "$NEW_HASH" ]; then
-                sed -i -E "s/^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=).*/PKG_HASH:=$NEW_HASH/" "$makefile"
-                echo "✅ $name: Upstream aligned"
-                echo "   Source : $FILE"
-                echo "   SHA256 : $NEW_HASH"
-              else
-                echo "⚠️ $name: SHA256 calculation failed, keeping 'skip'"
-              fi
-            else
-              echo "⚠️ $name: Artifact missing, keeping 'skip' to force build"
-            fi
-          }
-
-          sync_hash "sing-box" "package/openwrt-passwall-packages/sing-box/Makefile" "sing-box-"
-          
-          set -e
-          echo "🔒 [SDC v1.4] Adaptive mode completed"
           # =====================================================
 
           # 全域精準破壞前端選單殘留節點 
@@ -1578,6 +1475,115 @@ jobs:
           restore-keys: |
             ccache-tls-${{ env.CACHE_GEN }}-
             
+      - name: Stable Drift Control (SDC v1.4)
+        run: |
+          set -euo pipefail
+          cd openwrt
+
+          # =====================================================
+          # 🔒 Stable Drift Control v1.4 (Anti-Stale & Adaptive)
+          # =====================================================
+          set +e
+          
+          sync_hash () {
+            local name="$1"
+            local makefile="$2"
+            local pattern="$3"
+            
+            if [ ! -f "$makefile" ]; then
+              echo "⚠️ $name: Makefile missing, skip"
+              return
+            fi
+            
+            echo "🔒 [SDC v1.4] Adaptive source resolution: $name"
+            
+            # 1. POSIX ERE 萬用賦值 Regex 兼容修正 (:=, ?=, =) 並防止雙重定義
+            if grep -Eq '^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
+              sed -i -E 's/^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=).*/PKG_HASH:=skip/' "$makefile"
+            else
+              printf '\nPKG_HASH:=skip\n' >> "$makefile"
+            fi
+
+            # PKG_MIRROR_HASH 保持原樣或僅清除，不自動盲目賦值
+            if grep -Eq '^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=)' "$makefile"; then
+              sed -i -E 's/^[[:space:]]*PKG_MIRROR_HASH[[:space:]]*(:=|\?=|=).*/PKG_MIRROR_HASH:=skip/' "$makefile"
+            fi
+            
+            # 2. 讓 OpenWrt build system 自己解析 package metadata
+            local pkg_source=""
+            pkg_source="$(
+              make -s "package/${name}/dumpinfo" 2>/dev/null |
+                sed -n 's/^Source: //p' |
+                head -n 1
+            )" || true
+            
+            pkg_source="$(
+              printf '%s' "$pkg_source" |
+                sed 's/\r$//' |
+                sed 's/^[[:space:]]*//' |
+                sed 's/[[:space:]]*$//'
+            )"
+            
+            if [ -n "$pkg_source" ]; then
+              pkg_source="$(basename -- "$pkg_source")"
+              echo "🧹 [SDC v1.4] Purging stale dl cache for exact source: $pkg_source"
+              rm -f "dl/$pkg_source"
+            fi
+            
+            # 3. 觸發實際下載 (強制從上游抓取乾淨 Artifact，並保留錯誤可觀測性)
+            if make "package/${name}/download" V=s >"/tmp/sdc-${name}-download.log" 2>&1; then
+              echo "✅ $name: download stage completed"
+            else
+              echo "⚠️ $name: download stage failed; continuing with Adaptive Drift"
+              tail -n 80 "/tmp/sdc-${name}-download.log" || true
+            fi
+            
+            local FILE=""
+            
+            # 4. 精準定位 OpenWrt 實際下載 Artifact
+            if [ -n "$pkg_source" ]; then
+              if [ -f "dl/$pkg_source" ]; then
+                FILE="dl/$pkg_source"
+              fi
+            fi
+            
+            # 5. Legacy / Drift Fallback
+            if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+              FILE="$(
+                find dl -maxdepth 1 -type f \
+                  \( -name "${pattern}*.tar.gz" \
+                  -o -name "${pattern}*.tar.xz" \
+                  -o -name "${pattern}*.zip" \) \
+                  -print 2>/dev/null |
+                  sort |
+                  head -n 1
+              )"
+            fi
+            
+            # 6. SHA256 Self-Healing
+            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
+              local NEW_HASH=""
+              NEW_HASH="$(sha256sum "$FILE" | awk '{print $1}')" || true
+              if [ -n "$NEW_HASH" ]; then
+                sed -i -E "s/^[[:space:]]*PKG_HASH[[:space:]]*(:=|\?=|=).*/PKG_HASH:=$NEW_HASH/" "$makefile"
+                echo "✅ $name: Upstream aligned"
+                echo "   Source : $FILE"
+                echo "   SHA256 : $NEW_HASH"
+              else
+                echo "⚠️ $name: SHA256 calculation failed, keeping 'skip'"
+              fi
+            else
+              echo "⚠️ $name: Artifact missing, keeping 'skip' to force build"
+            fi
+          }
+
+          sync_hash "sing-box" "package/openwrt-passwall-packages/sing-box/Makefile" "sing-box-"
+          
+          set -e
+          echo "🔒 [SDC v1.4] Adaptive mode completed"
+          # =====================================================
+
+
       - name: Generate Core Config
         run: |
           set -euo pipefail
@@ -1589,6 +1595,8 @@ jobs:
             echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1536"
             echo "CONFIG_TARGET_IMAGES_GZIP=y"
             echo "CONFIG_USE_APK=y"
+            echo "CONFIG_PACKAGE_luci=y"
+            echo "CONFIG_LUCI_LANG_zh_Hans=y"
             echo "CONFIG_PACKAGE_luci-app-passwall=y"
             echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y"
             echo "CONFIG_PACKAGE_xray-core=n"
@@ -1605,7 +1613,6 @@ jobs:
             echo "CONFIG_PACKAGE_ddns-scripts-cloudflare=y"
             echo "CONFIG_PACKAGE_luci-app-upnp=y"
             echo "CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y"
-            echo "CONFIG_PACKAGE_luci-light=y"
             echo "CONFIG_PACKAGE_luci-theme-argon=y"
             echo "CONFIG_PACKAGE_luci-app-argon-config=y"
             echo "CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y"
@@ -1640,6 +1647,12 @@ jobs:
             echo "CONFIG_CCACHE=y"
           } > .config
           
+          echo "=== 🇨🇳 Chinese LuCI Defconfig Audit ==="
+          for cfg in CONFIG_PACKAGE_luci CONFIG_LUCI_LANG_zh_Hans CONFIG_PACKAGE_luci-i18n-base-zh-cn; do
+            grep -Eq "^${cfg}=y$" .config || { echo "❌ REQUIRED CHINESE LUCi CONFIG MISSING: $cfg"; exit 1; }
+          done
+          echo "✅ Chinese LuCI defconfig audit passed"
+          
           echo "=== 🔒 Forbidden Package Defconfig Audit ==="
           for p in block-mount automount luci-app-fstab luci-app-plugins xray-core; do
             if grep -Eq "^CONFIG_PACKAGE_${p}=[ym]" .config; then
@@ -1660,7 +1673,17 @@ jobs:
               exit 1
             fi
           done
-          echo "✅ Post-defconfig forbidden package audit passed"
+          echo "=== 🇨🇳 Post-Defconfig Chinese LuCI Audit ==="
+          for cfg in CONFIG_PACKAGE_luci CONFIG_LUCI_LANG_zh_Hans CONFIG_PACKAGE_luci-i18n-base-zh-cn; do
+            grep -Eq "^${cfg}=y$" .config || { echo "❌ REQUIRED CHINESE LUCI CONFIG MISSING AFTER DEFCONFIG: $cfg"; exit 1; }
+          done
+          echo "✅ Post-defconfig Chinese LuCI audit passed"
+          
+          echo "=== 🔒 Post-Defconfig Sing-box/PassWall Capability Audit ==="
+          for p in sing-box luci-app-passwall; do
+            grep -Eq "^CONFIG_PACKAGE_${p}=y$" .config || { echo "❌ REQUIRED PACKAGE MISSING AFTER DEFCONFIG: $p"; exit 1; }
+          done
+          echo "✅ Post-defconfig Sing-box/PassWall capability audit passed"
 
           ./scripts/diffconfig.sh > ../logs_diffconfig.txt
           gzip -9f -c .config > ../logs_full.config.gz
@@ -1762,7 +1785,21 @@ jobs:
               exit 1
             fi
           done
-          echo "✅ Final manifest package audit passed"
+          echo "=== 🇨🇳 Final Chinese LuCI Manifest Audit ==="
+          grep -Eq "(^|[[:space:]])luci-i18n-base-zh-cn([[:space:]]|$)" release_assets/installed-packages.txt || {
+            echo "❌ CHINESE LUCI BASE PACKAGE MISSING FROM FINAL MANIFEST"
+            exit 1
+          }
+          echo "✅ Final Chinese LuCI manifest audit passed"
+          
+          echo "=== 🔒 No-Xray Final Manifest Positive Audit ==="
+          for p in sing-box luci-app-passwall; do
+            if ! grep -Eq "^${p} " release_assets/installed-packages.txt; then
+              echo "❌ REQUIRED NO-XRAY PACKAGE MISSING FROM FINAL MANIFEST: $p"
+              exit 1
+            fi
+          done
+          echo "✅ No-Xray final manifest positive audit passed"
           
           find openwrt/bin/packages -name "*.apk" | sort > release_assets/apk-list.txt
           [ -s release_assets/apk-list.txt ] || rm -f release_assets/apk-list.txt
