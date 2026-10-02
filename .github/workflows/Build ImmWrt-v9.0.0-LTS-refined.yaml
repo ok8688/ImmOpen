@@ -1620,6 +1620,8 @@ jobs:
             echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1536"
             echo "CONFIG_TARGET_IMAGES_GZIP=y"
             echo "CONFIG_USE_APK=y"
+            echo "CONFIG_PACKAGE_luci=y"
+            echo "CONFIG_LUCI_LANG_zh_Hans=y"
             echo "CONFIG_PACKAGE_luci-app-passwall=y"
             echo "CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y"
             echo "CONFIG_PACKAGE_xray-core=y"
@@ -1690,7 +1692,33 @@ jobs:
           
           echo "=== 🔬 WireGuard Package Selection Audit ==="
           grep -iE "CONFIG_PACKAGE_(kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode)" .config || true
-          make defconfig && ./scripts/diffconfig.sh > ../logs_diffconfig.txt
+          make defconfig
+
+          echo "=== 🔒 Post-Defconfig Forbidden Package Audit ==="
+          for p in block-mount automount luci-app-fstab luci-app-plugins; do
+            if grep -Eq "^CONFIG_PACKAGE_${p}=[ym]" .config; then
+              echo "❌ FORBIDDEN PACKAGE ENABLED AFTER DEFCONFIG: $p"
+              exit 1
+            fi
+          done
+          echo "✅ Post-defconfig forbidden package audit passed"
+
+          echo "=== 🇨🇳 TLS Chinese LuCI Audit ==="
+          for cfg in CONFIG_LUCI_LANG_zh_Hans CONFIG_PACKAGE_luci-i18n-base-zh-cn; do
+            grep -Eq "^${cfg}=y$" .config || { echo "❌ REQUIRED CHINESE CONFIG MISSING: $cfg"; exit 1; }
+          done
+          echo "✅ TLS Chinese LuCI config audit passed"
+
+          echo "=== 🔒 Post-Defconfig Full TLS Positive Capability Audit ==="
+          for p in xray-core sing-box luci-app-passwall; do
+            if ! grep -Eq "^CONFIG_PACKAGE_${p}=y$" .config; then
+              echo "❌ REQUIRED TLS PACKAGE MISSING AFTER DEFCONFIG: $p"
+              exit 1
+            fi
+          done
+          echo "✅ Post-defconfig TLS positive capability audit passed"
+
+          ./scripts/diffconfig.sh > ../logs_diffconfig.txt
           gzip -9f -c .config > ../logs_full.config.gz
           
       - name: Build Firmware
@@ -1793,6 +1821,13 @@ jobs:
           done
           echo "✅ Final manifest package audit passed"
 
+          echo "=== 🇨🇳 TLS Final Chinese LuCI Manifest Audit ==="
+          grep -Eq "(^|[[:space:]])luci-i18n-base-zh-cn([[:space:]]|$)" release_assets/installed-packages.txt || {
+            echo "❌ CHINESE LUCI BASE PACKAGE MISSING FROM FINAL MANIFEST"
+            exit 1
+          }
+          echo "✅ TLS final Chinese LuCI manifest audit passed"
+          
           echo "=== 🔒 Full TLS Final Manifest Positive Audit ==="
           for p in xray-core sing-box luci-app-passwall; do
             if ! grep -Eq "^${p} " release_assets/installed-packages.txt; then
