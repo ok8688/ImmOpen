@@ -1455,8 +1455,8 @@ jobs:
       - name: Generate Cache Variables
         id: var
         run: |
-          echo "dl_key=dl-v9.0.0-sdc14-${{ env.CACHE_GEN }}-${{ hashFiles('feeds.snapshot.txt') }}" >> $GITHUB_OUTPUT
-          echo "ccache_key=ccache-tls-${{ env.CACHE_GEN }}-${{ hashFiles('feeds.snapshot.txt') }}" >> $GITHUB_OUTPUT
+          echo "dl_key=dl-tls-${{ hashFiles('feeds.snapshot.txt') }}" >> $GITHUB_OUTPUT
+          echo "ccache_key=ccache-tls-${{ hashFiles('feeds.snapshot.txt') }}" >> $GITHUB_OUTPUT
 
       - name: Restore Cache (dl)
         uses: actions/cache/restore@v4
@@ -1465,7 +1465,7 @@ jobs:
             openwrt/dl
           key: ${{ steps.var.outputs.dl_key }}
           restore-keys: |
-            dl-v9.0.0-sdc14-${{ env.CACHE_GEN }}-
+            dl-tls-
             
       - name: Restore Cache (ccache)
         uses: actions/cache/restore@v4
@@ -1473,7 +1473,7 @@ jobs:
           path: ~/.ccache
           key: ${{ steps.var.outputs.ccache_key }}
           restore-keys: |
-            ccache-tls-${{ env.CACHE_GEN }}-
+            ccache-tls-
             
       - name: Stable Drift Control (SDC v1.4)
         run: |
