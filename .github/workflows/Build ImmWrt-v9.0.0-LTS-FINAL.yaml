@@ -1,4 +1,4 @@
-name: Build ImmWrt-v9.0.0-LTS-refined
+name: Build ImmWrt-v9.0.0-LTS-FINAL
 
 on:
   workflow_dispatch:
@@ -1637,7 +1637,6 @@ jobs:
             echo "CONFIG_PACKAGE_ddns-scripts-cloudflare=y"
             echo "CONFIG_PACKAGE_luci-app-upnp=y"
             echo "CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y"
-            echo "CONFIG_PACKAGE_luci-light=y"
             echo "CONFIG_PACKAGE_luci-theme-argon=y"
             echo "CONFIG_PACKAGE_luci-app-argon-config=y"
             echo "CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y"
@@ -1672,6 +1671,12 @@ jobs:
             echo "CONFIG_CCACHE=y"
           } > .config
           
+          echo "=== 🇨🇳 Chinese LuCI Defconfig Audit ==="
+          for cfg in CONFIG_PACKAGE_luci CONFIG_LUCI_LANG_zh_Hans CONFIG_PACKAGE_luci-i18n-base-zh-cn; do
+            grep -Eq "^${cfg}=y$" .config || { echo "❌ REQUIRED CHINESE LUCI CONFIG MISSING: $cfg"; exit 1; }
+          done
+          echo "✅ Chinese LuCI defconfig audit passed"
+
           echo "=== 🔒 Forbidden Package Defconfig Audit ==="
           for p in block-mount automount luci-app-fstab luci-app-plugins; do
             if grep -Eq "^CONFIG_PACKAGE_${p}=[ym]" .config; then
