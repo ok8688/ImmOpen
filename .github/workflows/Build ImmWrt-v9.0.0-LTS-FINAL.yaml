@@ -135,7 +135,7 @@ jobs:
           retry bash -c 'timeout 20m git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall.git package/openwrt-passwall'
             
           # =====================================================
-          # 🦀 Master Rust Transplant：Ubuntu 24.04 / LTS Toolchain Compatibility
+          # 🦀 Master Rust Transplant：Ubuntu 26.04 / LTS Toolchain Compatibility
           # 直接取得 ImmortalWrt packages master 的 Rust package 定義。
           # =====================================================
           echo "▶️ [Step] Transplanting Rust package from ImmortalWrt packages master..."
