@@ -20,6 +20,7 @@ env:
   CCACHE_MAXSIZE: 8G
   CCACHE_BASEDIR: ${{ github.workspace }}
   CCACHE_SLOPPINESS: time_macros,file_macro
+  IMMORTALWRT_BRANCH: v25.12.2
 
 jobs:
   build:
