@@ -118,8 +118,8 @@ jobs:
           set -euo pipefail
           source /tmp/sre_utils.sh
           
-          echo "▶️ [Step] Cloning ImmortalWrt 25.12.2 LTS Source..."
-          retry bash -c 'rm -rf openwrt && timeout 20m git clone -b v25.12.2 --single-branch --depth 1 https://github.com/immortalwrt/immortalwrt.git openwrt'
+          echo "▶️ [Step] Cloning ImmortalWrt ${IMMORTALWRT_BRANCH} LTS Source..."
+          retry bash -c 'rm -rf openwrt && timeout 20m git clone -b "${IMMORTALWRT_BRANCH}" --single-branch --depth 1 https://github.com/immortalwrt/immortalwrt.git openwrt'
           cd openwrt
           
           echo "▶️ [Step] Updating base feeds..."
