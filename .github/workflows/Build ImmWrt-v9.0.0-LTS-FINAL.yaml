@@ -20,7 +20,6 @@ env:
   CCACHE_MAXSIZE: 8G
   CCACHE_BASEDIR: ${{ github.workspace }}
   CCACHE_SLOPPINESS: time_macros,file_macro
-  CACHE_GEN: v3
   IMMORTALWRT_BRANCH: v25.12.2
 
 jobs:
@@ -1894,6 +1893,7 @@ jobs:
         with:
           tag_name: v9.0.0-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
           name: ImmWrt v9.0.0-LTS (TSAR BOMBA FULL TLS SEALED)
+          make_latest: true
           body: |
             ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (Ubuntu 26.04 + Master Rust + SDC v1.4 + Full Xray)
             - **版本基線**：基於 ImmortalWrt `${{ env.IMMORTALWRT_BRANCH }}` LTS 正式分支構建；版本指針集中化，目前鎖定已驗證的 v25.12.2；25.12.3 僅在 upstream tag 可確認存在後再切換，避免無效 branch 直接導致 workflow 失敗。
