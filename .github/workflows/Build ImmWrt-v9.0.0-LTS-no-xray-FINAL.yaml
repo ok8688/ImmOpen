@@ -20,7 +20,6 @@ env:
   CCACHE_MAXSIZE: 8G
   CCACHE_BASEDIR: ${{ github.workspace }}
   CCACHE_SLOPPINESS: time_macros,file_macro
-  CACHE_GEN: v2
 
 jobs:
   build:
@@ -1850,6 +1849,7 @@ jobs:
         with:
           tag_name: v9.0.0-LTS-b${{ github.run_number }}-${{ steps.meta.outputs.date }}
           name: ImmWrt v9.0.0-LTS (TSAR BOMBA SEALED)
+          make_latest: true
           body: |
             ### 🔒 v9.0.0-LTS TSAR BOMBA SEALED (Ubuntu 26.04 + Master Rust + SDC v1.4 + Xray Decoupled)
             - **Build Runner**：升級至 Ubuntu 26.04；移除 Ubuntu 26.04 已不可用的舊 Python 套件，改用已驗證可用的 `python3-setuptools`。
