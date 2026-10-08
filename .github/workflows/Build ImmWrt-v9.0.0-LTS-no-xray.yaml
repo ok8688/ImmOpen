@@ -1,4 +1,4 @@
-name: Build ImmWrt-v9.0.0-LTS-no-xray-PRD
+name: Build ImmWrt-v9.0.0-LTS-no-xray
 
 on:
   workflow_dispatch:
