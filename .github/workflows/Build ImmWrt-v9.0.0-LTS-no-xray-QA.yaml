@@ -1619,9 +1619,9 @@ jobs:
             echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y"
             echo "CONFIG_PACKAGE_qemu-ga=y"
             echo "CONFIG_PACKAGE_irqbalance=y"
+            echo "CONFIG_PACKAGE_bash=y"
             echo "CONFIG_PACKAGE_kmod-wireguard=y"
             echo "CONFIG_PACKAGE_wireguard-tools=y"
-            echo "CONFIG_PACKAGE_wireguard-tools-wg-quick=y"
             echo "CONFIG_PACKAGE_luci-proto-wireguard=y"
             echo "CONFIG_PACKAGE_qrencode=y"
             echo "CONFIG_PACKAGE_kmod-crypto-kpp=y"
@@ -1663,15 +1663,29 @@ jobs:
           echo "✅ Defconfig forbidden package audit passed"
           
           echo "=== 🔒 Common Required Package Config Audit ==="
-          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance kmod-wireguard wireguard-tools wireguard-tools-wg-quick luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
+          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
           for p in $COMMON_REQUIRED_PACKAGES; do
             grep -Eq "^CONFIG_PACKAGE_${p}=y$" .config || { echo "❌ REQUIRED COMMON PACKAGE MISSING FROM CONFIG: $p"; exit 1; }
           done
           echo "✅ Common required package config audit passed"
           
           echo "=== 🔬 WireGuard Package Selection Audit ==="
-          grep -iE "CONFIG_PACKAGE_(kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode)" .config || true
+          grep -iE "CONFIG_PACKAGE_(bash|kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode)" .config || true
+          echo "=== 🔎 WireGuard Source/Kconfig Audit (Pre-Defconfig) ==="
+          find package/network package/feeds/packages package/feeds -path '*/wireguard-tools/Makefile' -print 2>/dev/null || true
+          grep -R -n -A18 -B4 'define Package/wireguard-tools' package/network package/feeds/packages package/feeds 2>/dev/null | head -100 || true
+          echo "--- generated WireGuard package symbols ---"
+          for p in bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode; do
+            echo "===== $p ====="
+            grep -n -A8 -B3 "PACKAGE_${p}" tmp/.config-package.in 2>/dev/null | head -30 || true
+          done
+          echo "--- pre-defconfig WireGuard config ---"
+          grep -E '^(CONFIG_PACKAGE_(bash|kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode))=' .config || true
           make defconfig
+          echo "=== 🔎 WireGuard Post-Defconfig Diagnostic ==="
+          grep -E '^(CONFIG_PACKAGE_(bash|kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode))=' .config || true
+          echo "--- wg-quick provider check ---"
+          grep -R -n -E 'WITH_WGQUICK|wg-quick/.*\.bash' package/network/utils/wireguard-tools package/feeds/packages 2>/dev/null | head -40 || true
 
           echo "=== 🔒 Post-Defconfig Forbidden Package Audit ==="
           for p in block-mount automount luci-app-fstab luci-app-plugins xray-core; do
@@ -1687,7 +1701,7 @@ jobs:
           echo "✅ Post-defconfig Chinese LuCI audit passed"
           
           echo "=== 🔒 Post-Defconfig Common Required Package Audit ==="
-          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance kmod-wireguard wireguard-tools wireguard-tools-wg-quick luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
+          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
           for p in $COMMON_REQUIRED_PACKAGES; do
             grep -Eq "^CONFIG_PACKAGE_${p}=y$" .config || { echo "❌ REQUIRED COMMON PACKAGE MISSING AFTER DEFCONFIG: $p"; exit 1; }
           done
@@ -1807,7 +1821,7 @@ jobs:
           echo "✅ Final Chinese LuCI manifest audit passed"
           
           echo "=== 🔒 Common Required Package Final Manifest Audit ==="
-          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance kmod-wireguard wireguard-tools wireguard-tools-wg-quick luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
+          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
           for p in $COMMON_REQUIRED_PACKAGES; do
             if ! grep -Eq "(^|[[:space:]])${p}([[:space:]]|$)" release_assets/installed-packages.txt; then
               echo "❌ REQUIRED COMMON PACKAGE MISSING FROM FINAL MANIFEST: $p"
@@ -1815,6 +1829,14 @@ jobs:
             fi
           done
           echo "✅ Common required package final manifest audit passed"
+          echo "=== 🔧 Final WireGuard wg-quick Payload Audit ==="
+          WG_APK=$(find openwrt/bin/packages -type f -name 'wireguard-tools*.apk' -print -quit 2>/dev/null || true)
+          [ -n "$WG_APK" ] || { echo "❌ wireguard-tools APK missing from final package output"; exit 1; }
+          tar -tf "$WG_APK" 2>/dev/null | grep -Eq '(^|/)usr/bin/wg-quick$' || {
+            echo "❌ wg-quick binary missing from final wireguard-tools APK"
+            exit 1
+          }
+          echo "✅ Final wg-quick payload audit passed"
           
           echo "=== 🔒 No-Xray Final Manifest Positive Audit ==="
           for p in sing-box luci-app-passwall; do
@@ -1886,7 +1908,7 @@ jobs:
             - **x86 block-mount 根因修復**：移除 x86 target 的 `automount` 預設套件，並同步鎖定 `CONFIG_PACKAGE_automount=n`；避免 `automount → block-mount` 依賴鏈在最終 Manifest 階段把 `block-mount` 重新拉回。
             - **PassWall 最新主幹同步**：即時拉取最新 `openwrt-passwall` 與 `openwrt-passwall-packages` 最新 commit。
             - **備份引擎升級**：內建 `ib v1.8` 黃金基準垂直排版版，解耦套件強依賴，確保跨版本配置恢復安全。
-            - **網路核心擴展**：完整嵌入 `WireGuard` 核心套件、密碼學底層模組、`wg-quick` 工具鏈及 `qrencode` (QR Code 支援)。
+            - **網路核心擴展**：完整嵌入 `WireGuard` 核心套件、`bash`、`wg-quick` 工具鏈及 `qrencode` (QR Code 支援)。
             - **自癒架構 (SDC v1.4 Final)**：導入 OpenWrt Native Build System (dumpinfo) 解析；強制清除同名舊 dl 壓縮包消滅 Stale Cache；精準相容 ERE `(:=|\?=|=)` 賦值；導入 SDC 獨立下載狀態的可觀測性日誌 (`tail -n 80`)；保留 `PKG_MIRROR_HASH` 原始語義。
             - **極致溯源與環境決定性**：將 `openwrt_release` 的提取範圍絕對限縮至 `target-x86_64_musl` 杜絕多目標殘留干擾；升級 4G Swap 建立流程 (`rm -f` 防護) 免疫 Runner Drift。
             - **快取綱要嚴格隔離**：`sdc14` Namespace 搭配 `feeds.snapshot.txt` 雜湊前綴鎖定 `restore-keys`，達成快照級精準命中與物理隔離。
@@ -1904,6 +1926,6 @@ jobs:
 # 終極打磨：
 # 1. 徹底棄用 Shell Wildcard，改用 find -print -quit 提取發行版指紋，免疫未來目錄結構變異。
 # 2. [手術植入] 升級 ib v1.8 原生備份工具，解耦套件強依賴，修復 tar 目錄項誤判。
-# 3. [手術植入] 補齊 WireGuard 核心、wg-quick 與 qrencode (QR Code 支援)。
+# 3. [手術植入] 補齊 WireGuard 核心、bash、wg-quick 與 qrencode (QR Code 支援)。
 # 4. [SDC v1.4 Final] 優先使用 OpenWrt Native dumpinfo 解析精準取檔，並保留 Legacy pattern 作為防禦性 Fallback。
 # =====================================================================
