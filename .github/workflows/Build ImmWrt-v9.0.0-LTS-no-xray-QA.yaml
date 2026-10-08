@@ -1637,8 +1637,8 @@ jobs:
             echo "CONFIG_PACKAGE_wget-ssl=y"
             echo "CONFIG_PACKAGE_unzip=y"
             echo "CONFIG_PACKAGE_kmod-tcp-bbr=y"
-            echo "CONFIG_PACKAGE_kmod-virtio-net=y"
-            echo "CONFIG_PACKAGE_kmod-virtio-blk=y"
+            echo "CONFIG_VIRTIO_NET=y"
+            echo "CONFIG_VIRTIO_BLK=y"
             echo "CONFIG_PACKAGE_kmod-nft-offload=y"
             echo "CONFIG_PACKAGE_block-mount=n"
             echo "CONFIG_PACKAGE_automount=n"
@@ -1663,11 +1663,16 @@ jobs:
           echo "✅ Defconfig forbidden package audit passed"
           
           echo "=== 🔒 Common Required Package Config Audit ==="
-          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
+          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-nft-offload"
           for p in $COMMON_REQUIRED_PACKAGES; do
             grep -Eq "^CONFIG_PACKAGE_${p}=y$" .config || { echo "❌ REQUIRED COMMON PACKAGE MISSING FROM CONFIG: $p"; exit 1; }
           done
           echo "✅ Common required package config audit passed"
+          echo "=== 🔒 Common Required VirtIO Kernel Feature Audit ==="
+          for cfg in CONFIG_VIRTIO_NET CONFIG_VIRTIO_BLK; do
+            grep -Eq "^${cfg}=y$" .config || { echo "❌ REQUIRED COMMON KERNEL FEATURE MISSING FROM CONFIG: $cfg"; exit 1; }
+          done
+          echo "✅ Common required VirtIO kernel feature audit passed"
           
           echo "=== 🔬 WireGuard Package Selection Audit ==="
           grep -iE "CONFIG_PACKAGE_(bash|kmod-wireguard|wireguard-tools|luci-proto-wireguard|qrencode)" .config || true
@@ -1701,7 +1706,7 @@ jobs:
           echo "✅ Post-defconfig Chinese LuCI audit passed"
           
           echo "=== 🔒 Post-Defconfig Common Required Package Audit ==="
-          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
+          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-nft-offload"
           for p in $COMMON_REQUIRED_PACKAGES; do
             grep -Eq "^CONFIG_PACKAGE_${p}=y$" .config || { echo "❌ REQUIRED COMMON PACKAGE MISSING AFTER DEFCONFIG: $p"; exit 1; }
           done
@@ -1821,7 +1826,7 @@ jobs:
           echo "✅ Final Chinese LuCI manifest audit passed"
           
           echo "=== 🔒 Common Required Package Final Manifest Audit ==="
-          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-virtio-net kmod-virtio-blk kmod-nft-offload"
+          COMMON_REQUIRED_PACKAGES="luci luci-app-passwall luci-i18n-passwall-zh-cn sing-box geoview ca-bundle ca-certificates smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts-cloudflare luci-app-upnp luci-i18n-upnp-zh-cn luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn luci-i18n-base-zh-cn qemu-ga irqbalance bash kmod-wireguard wireguard-tools luci-proto-wireguard qrencode kmod-crypto-kpp kmod-crypto-lib-chacha20poly1305 luci-app-ttyd luci-i18n-ttyd-zh-cn luci-app-advanced-reboot luci-i18n-advanced-reboot-zh-cn htop nano curl ethtool wget-ssl unzip kmod-tcp-bbr kmod-nft-offload"
           for p in $COMMON_REQUIRED_PACKAGES; do
             if ! grep -Eq "(^|[[:space:]])${p}([[:space:]]|$)" release_assets/installed-packages.txt; then
               echo "❌ REQUIRED COMMON PACKAGE MISSING FROM FINAL MANIFEST: $p"
