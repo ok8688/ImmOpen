@@ -1,4 +1,4 @@
-name: Build ImmWrt-v9.0.0-LTS-PRD
+name: Build ImmWrt-v9.0.0-LTS
 
 on:
   workflow_dispatch:
