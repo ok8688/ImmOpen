@@ -1,5 +1,5 @@
 # ==== VARIANT CONFIG START ====
-name: Build ImmWrt-v9.0.0-LTS-no-xray node24
+name: Build ImmWrt-v9.0.0-LTS-no-xray
 env:
   IMMORTALWRT_VERSION: v25.12.2
   INCLUDE_XRAY: "false"
